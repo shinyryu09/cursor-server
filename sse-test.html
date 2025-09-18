@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSE 테스트 - Cursor Server</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #fafafa;
+        }
+        .test-section h2 {
+            color: #555;
+            margin-top: 0;
+        }
+        input[type="text"], textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        textarea {
+            height: 100px;
+            resize: vertical;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        .response-area {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 15px;
+            min-height: 100px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+            overflow-y: auto;
+            max-height: 400px;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+        .status.connected {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.connecting {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        .chunk {
+            display: inline;
+            animation: fadeIn 0.1s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .error {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        .success {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .info {
+            color: #17a2b8;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 SSE 테스트 - Cursor Server</h1>
+        
+        <!-- 서버 상태 -->
+        <div class="test-section">
+            <h2>📡 서버 상태</h2>
+            <div id="serverStatus" class="status disconnected">연결 안됨</div>
+            <button onclick="checkServerStatus()">서버 상태 확인</button>
+            <button onclick="clearAll()">모든 내용 지우기</button>
+        </div>
+
+        <!-- 코드 완성 테스트 -->
+        <div class="test-section">
+            <h2>💻 코드 완성 테스트 (SSE)</h2>
+            <input type="text" id="completionPrompt" placeholder="코드 완성 프롬프트를 입력하세요..." value="Swift에서 Hello World 프로그램을 작성해주세요">
+            <br>
+            <button onclick="testCompletionSSE()" id="completionBtn">코드 완성 테스트 (SSE)</button>
+            <button onclick="testCompletionJSON()" id="completionJsonBtn">코드 완성 테스트 (JSON)</button>
+            <div id="completionResponse" class="response-area"></div>
+        </div>
+
+        <!-- 채팅 완성 테스트 -->
+        <div class="test-section">
+            <h2>💬 채팅 완성 테스트 (SSE)</h2>
+            <textarea id="chatMessages" placeholder="채팅 메시지를 입력하세요...">안녕하세요! Swift 개발에 대해 알려주세요.</textarea>
+            <br>
+            <button onclick="testChatSSE()" id="chatBtn">채팅 완성 테스트 (SSE)</button>
+            <button onclick="testChatJSON()" id="chatJsonBtn">채팅 완성 테스트 (JSON)</button>
+            <div id="chatResponse" class="response-area"></div>
+        </div>
+
+        <!-- 연결 상태 모니터링 -->
+        <div class="test-section">
+            <h2>📊 연결 상태 모니터링</h2>
+            <div id="connectionStatus" class="status disconnected">연결 안됨</div>
+            <div id="connectionLog" class="response-area"></div>
+        </div>
+    </div>
+
+    <script>
+        const SERVER_URL = 'http://localhost:3000';
+        let eventSource = null;
+        let connectionCount = 0;
+
+        // 서버 상태 확인
+        async function checkServerStatus() {
+            const statusDiv = document.getElementById('serverStatus');
+            statusDiv.textContent = '확인 중...';
+            statusDiv.className = 'status connecting';
+
+            try {
+                const response = await fetch(`${SERVER_URL}/health`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    statusDiv.textContent = `✅ 서버 연결됨 - 포트: ${data.currentWorkspace || '기본'}`;
+                    statusDiv.className = 'status connected';
+                } else {
+                    statusDiv.textContent = '❌ 서버 응답 오류';
+                    statusDiv.className = 'status disconnected';
+                }
+            } catch (error) {
+                statusDiv.textContent = `❌ 서버 연결 실패: ${error.message}`;
+                statusDiv.className = 'status disconnected';
+            }
+        }
+
+        // 코드 완성 SSE 테스트
+        async function testCompletionSSE() {
+            const prompt = document.getElementById('completionPrompt').value;
+            const responseDiv = document.getElementById('completionResponse');
+            const btn = document.getElementById('completionBtn');
+            
+            if (!prompt.trim()) {
+                alert('프롬프트를 입력해주세요.');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = '스트리밍 중...';
+            responseDiv.textContent = '';
+
+            try {
+                const response = await fetch(`${SERVER_URL}/v1/completions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        prompt: prompt,
+                        stream: true,
+                        max_tokens: 1000,
+                        temperature: 0.7
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop(); // 마지막 불완전한 라인은 버퍼에 보관
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = line.slice(6);
+                            if (data === '[DONE]') {
+                                responseDiv.innerHTML += '<div class="success">✅ 스트리밍 완료</div>';
+                                break;
+                            }
+
+                            try {
+                                const parsed = JSON.parse(data);
+                                if (parsed.choices && parsed.choices[0] && parsed.choices[0].text) {
+                                    const text = parsed.choices[0].text;
+                                    responseDiv.innerHTML += `<span class="chunk">${text}</span>`;
+                                    responseDiv.scrollTop = responseDiv.scrollHeight;
+                                }
+                            } catch (e) {
+                                console.log('JSON 파싱 오류:', e, 'Data:', data);
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                responseDiv.innerHTML += `<div class="error">❌ 오류: ${error.message}</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '코드 완성 테스트 (SSE)';
+            }
+        }
+
+        // 코드 완성 JSON 테스트
+        async function testCompletionJSON() {
+            const prompt = document.getElementById('completionPrompt').value;
+            const responseDiv = document.getElementById('completionResponse');
+            const btn = document.getElementById('completionJsonBtn');
+            
+            if (!prompt.trim()) {
+                alert('프롬프트를 입력해주세요.');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = '요청 중...';
+            responseDiv.textContent = '';
+
+            try {
+                const response = await fetch(`${SERVER_URL}/v1/completions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        prompt: prompt,
+                        stream: false,
+                        max_tokens: 1000,
+                        temperature: 0.7
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    responseDiv.textContent = data.choices[0].text;
+                    responseDiv.innerHTML += '<div class="success">✅ JSON 응답 완료</div>';
+                } else {
+                    responseDiv.innerHTML += `<div class="error">❌ 오류: ${data.error?.message || '알 수 없는 오류'}</div>`;
+                }
+            } catch (error) {
+                responseDiv.innerHTML += `<div class="error">❌ 오류: ${error.message}</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '코드 완성 테스트 (JSON)';
+            }
+        }
+
+        // 채팅 완성 SSE 테스트
+        async function testChatSSE() {
+            const message = document.getElementById('chatMessages').value;
+            const responseDiv = document.getElementById('chatResponse');
+            const btn = document.getElementById('chatBtn');
+            
+            if (!message.trim()) {
+                alert('메시지를 입력해주세요.');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = '스트리밍 중...';
+            responseDiv.textContent = '';
+
+            try {
+                const response = await fetch(`${SERVER_URL}/v1/chat/completions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        messages: [
+                            { role: 'user', content: message }
+                        ],
+                        stream: true,
+                        max_tokens: 1000,
+                        temperature: 0.7
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = line.slice(6);
+                            if (data === '[DONE]') {
+                                responseDiv.innerHTML += '<div class="success">✅ 스트리밍 완료</div>';
+                                break;
+                            }
+
+                            try {
+                                const parsed = JSON.parse(data);
+                                if (parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.content) {
+                                    const content = parsed.choices[0].delta.content;
+                                    responseDiv.innerHTML += `<span class="chunk">${content}</span>`;
+                                    responseDiv.scrollTop = responseDiv.scrollHeight;
+                                }
+                            } catch (e) {
+                                console.log('JSON 파싱 오류:', e, 'Data:', data);
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                responseDiv.innerHTML += `<div class="error">❌ 오류: ${error.message}</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '채팅 완성 테스트 (SSE)';
+            }
+        }
+
+        // 채팅 완성 JSON 테스트
+        async function testChatJSON() {
+            const message = document.getElementById('chatMessages').value;
+            const responseDiv = document.getElementById('chatResponse');
+            const btn = document.getElementById('chatJsonBtn');
+            
+            if (!message.trim()) {
+                alert('메시지를 입력해주세요.');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = '요청 중...';
+            responseDiv.textContent = '';
+
+            try {
+                const response = await fetch(`${SERVER_URL}/v1/chat/completions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        messages: [
+                            { role: 'user', content: message }
+                        ],
+                        stream: false,
+                        max_tokens: 1000,
+                        temperature: 0.7
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    responseDiv.textContent = data.choices[0].message.content;
+                    responseDiv.innerHTML += '<div class="success">✅ JSON 응답 완료</div>';
+                } else {
+                    responseDiv.innerHTML += `<div class="error">❌ 오류: ${data.error?.message || '알 수 없는 오류'}</div>`;
+                }
+            } catch (error) {
+                responseDiv.innerHTML += `<div class="error">❌ 오류: ${error.message}</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '채팅 완성 테스트 (JSON)';
+            }
+        }
+
+        // 모든 내용 지우기
+        function clearAll() {
+            document.getElementById('completionResponse').textContent = '';
+            document.getElementById('chatResponse').textContent = '';
+            document.getElementById('connectionLog').textContent = '';
+        }
+
+        // 페이지 로드 시 서버 상태 확인
+        window.onload = function() {
+            checkServerStatus();
+        };
+    </script>
+</body>
+</html>
