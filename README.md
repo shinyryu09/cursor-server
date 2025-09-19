@@ -59,16 +59,6 @@ cursor-server/
   app.use(bodyParser.urlencoded({ extended: true, limit: '50mb' }));
   ```
 
-#### ✅ TypingGame 윈도우 최상위 설정 (2025-09-18)
-- **요청**: 게임 실행 시 윈도우가 최상위로 표시되도록 수정
-- **해결**: TypingGameApp.swift에 `.windowLevel(.floating)` modifier 추가
-- **결과**: 게임이 다른 윈도우들보다 위에 표시됨
-
-### 작업 통계
-- **총 작업 수**: 5개 (최근 5개 기준)
-- **성공률**: 100% (모든 작업 완료)
-- **평균 처리 시간**: 30-40초 (복잡한 요청 기준)
-
 ## 🛠 서버 실행 방법
 
 ### 1. 사전 요구사항
