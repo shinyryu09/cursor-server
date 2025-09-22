@@ -1,15 +1,16 @@
 {
-  "name": "cursor-server",
-  "version": "1.0.1",
-  "description": "Node.js server for Xcode Code Intelligence integration with Cursor CLI",
-  "main": "server.js",
+  "name": "mcp-cursor-server",
+  "version": "2.0.0",
+  "description": "MCP (Model Context Protocol) server for Xcode, Android Studio integration with Cursor CLI and multiple AI models",
+  "main": "src/server.js",
+  "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js",
-    "test": "echo \"No tests specified\" && exit 0",
-    "lint": "echo \"No linting configured\" && exit 0",
-    "format:check": "echo \"No formatting configured\" && exit 0",
-    "build": "echo \"No build process needed\" && exit 0",
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "test": "node --test test/**/*.test.js",
+    "lint": "eslint src/**/*.js",
+    "format": "prettier --write src/**/*.js",
+    "build": "echo \"No build process needed\"",
     "version:patch": "npm version patch --no-git-tag-version",
     "version:minor": "npm version minor --no-git-tag-version",
     "version:major": "npm version major --no-git-tag-version",
@@ -17,25 +18,38 @@
     "git:push": "npm run version:patch && git add . && git commit -m \"v$(npm run version:show --silent): $(git log -1 --pretty=%B | head -1)\" && git push origin main"
   },
   "keywords": [
+    "mcp",
+    "model-context-protocol",
     "cursor",
     "xcode",
-    "code-intelligence",
-    "nodejs",
-    "express"
+    "android-studio",
+    "ai",
+    "chatgpt",
+    "gemini",
+    "claude"
   ],
-  "author": "",
+  "author": "kakaovx",
   "license": "MIT",
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.4.0",
     "axios": "^1.6.0",
-    "body-parser": "^1.20.2",
-    "child_process": "^1.0.2",
     "cors": "^2.8.5",
     "express": "^4.18.2",
-    "fs": "^0.0.1-security",
-    "path": "^0.12.7",
-    "ws": "^8.18.3"
+    "ws": "^8.18.3",
+    "dotenv": "^16.3.1",
+    "winston": "^3.11.0",
+    "chalk": "^5.3.0",
+    "commander": "^11.1.0",
+    "openai": "^4.20.0",
+    "@google/generative-ai": "^0.2.0",
+    "@anthropic-ai/sdk": "^0.24.3"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1"
+    "nodemon": "^3.0.1",
+    "eslint": "^8.55.0",
+    "prettier": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
