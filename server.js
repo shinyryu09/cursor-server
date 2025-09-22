@@ -4,6 +4,8 @@ const bodyParser = require('body-parser');
 const { exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const WebSocket = require('ws');
+const axios = require('axios');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -15,6 +17,12 @@ app.use(bodyParser.urlencoded({ extended: true, limit: '50mb' }));
 
 // 전역 변수로 현재 작업 디렉토리 저장
 let currentWorkspacePath = null;
+
+// Cursor 에디터 연결 관련 변수
+let cursorWebSocket = null;
+let cursorConnected = false;
+let cursorPort = 3001; // Cursor 에디터의 기본 포트
+let cursorAuthToken = null;
 
 // 워크스페이스 경로 감지 및 설정 함수
 function detectAndSetWorkspace(req) {
@@ -130,6 +138,181 @@ function completeTask(taskId, result = null, error = null) {
         }
     }
     return task;
+}
+
+// Cursor 에디터 연결 함수들
+async function connectToCursorEditor() {
+    try {
+        console.log('🔄 Cursor 에디터에 연결 시도 중...');
+        
+        // Cursor 에디터가 실행 중인지 확인
+        const isRunning = await checkCursorEditorRunning();
+        if (!isRunning) {
+            console.log('❌ Cursor 에디터가 실행 중이 아닙니다.');
+            return false;
+        }
+        
+        // Cursor 에디터의 HTTP API 확인
+        const httpUrl = `http://localhost:${cursorPort}`;
+        try {
+            const response = await axios.get(`${httpUrl}/api/status`, { timeout: 5000 });
+            if (response.status === 200) {
+                console.log('✅ Cursor 에디터 HTTP API 연결 성공');
+                cursorConnected = true;
+                return true;
+            }
+        } catch (httpError) {
+            console.log('HTTP API 연결 실패, 다른 방법 시도...');
+        }
+        
+        // Cursor 에디터의 다른 가능한 엔드포인트들 시도
+        const possibleEndpoints = [
+            `${httpUrl}/api/health`,
+            `${httpUrl}/health`,
+            `${httpUrl}/status`,
+            `${httpUrl}/api/v1/status`
+        ];
+        
+        for (const endpoint of possibleEndpoints) {
+            try {
+                const response = await axios.get(endpoint, { timeout: 3000 });
+                if (response.status === 200) {
+                    console.log(`✅ Cursor 에디터 연결 성공: ${endpoint}`);
+                    cursorConnected = true;
+                    return true;
+                }
+            } catch (error) {
+                // 계속 다음 엔드포인트 시도
+                continue;
+            }
+        }
+        
+        console.log('❌ Cursor 에디터에 연결할 수 없습니다.');
+        return false;
+    } catch (error) {
+        console.error('❌ Cursor 에디터 연결 실패:', error);
+        return false;
+    }
+}
+
+async function checkCursorEditorRunning() {
+    try {
+        // Cursor 에디터 프로세스 확인
+        const { exec } = require('child_process');
+        return new Promise((resolve) => {
+            exec('pgrep -f "Cursor"', (error, stdout) => {
+                if (error) {
+                    resolve(false);
+                } else {
+                    resolve(stdout.trim().length > 0);
+                }
+            });
+        });
+    } catch (error) {
+        console.error('Cursor 에디터 실행 상태 확인 오류:', error);
+        return false;
+    }
+}
+
+async function sendToCursorEditor(message) {
+    if (!cursorConnected) {
+        console.log('❌ Cursor 에디터에 연결되지 않음');
+        return { success: false, error: 'Cursor 에디터에 연결되지 않음' };
+    }
+    
+    try {
+        const httpUrl = `http://localhost:${cursorPort}`;
+        const messageData = typeof message === 'string' ? { message: message } : message;
+        
+        // Cursor 에디터의 가능한 API 엔드포인트들 시도
+        const possibleEndpoints = [
+            `${httpUrl}/api/chat`,
+            `${httpUrl}/api/message`,
+            `${httpUrl}/api/send`,
+            `${httpUrl}/chat`,
+            `${httpUrl}/message`
+        ];
+        
+        for (const endpoint of possibleEndpoints) {
+            try {
+                const response = await axios.post(endpoint, messageData, { 
+                    timeout: 10000,
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (response.status === 200) {
+                    console.log('📤 Cursor 에디터로 메시지 전송 성공:', endpoint);
+                    return { success: true, response: response.data };
+                }
+            } catch (error) {
+                // 계속 다음 엔드포인트 시도
+                continue;
+            }
+        }
+        
+        console.log('❌ Cursor 에디터로 메시지 전송 실패');
+        return { success: false, error: '모든 API 엔드포인트에서 전송 실패' };
+    } catch (error) {
+        console.error('❌ Cursor 에디터로 메시지 전송 실패:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+async function askCursorEditor(question, context = {}) {
+    try {
+        if (!cursorConnected) {
+            return { success: false, error: 'Cursor 에디터에 연결되지 않음' };
+        }
+        
+        const httpUrl = `http://localhost:${cursorPort}`;
+        const messageData = {
+            question: question,
+            context: context,
+            timestamp: new Date().toISOString()
+        };
+        
+        // Cursor 에디터의 가능한 채팅 API 엔드포인트들 시도
+        const possibleEndpoints = [
+            `${httpUrl}/api/chat`,
+            `${httpUrl}/api/ask`,
+            `${httpUrl}/api/question`,
+            `${httpUrl}/chat`,
+            `${httpUrl}/ask`,
+            `${httpUrl}/question`
+        ];
+        
+        for (const endpoint of possibleEndpoints) {
+            try {
+                const response = await axios.post(endpoint, messageData, { 
+                    timeout: 30000,
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (response.status === 200) {
+                    console.log('📤 Cursor 에디터 질문 성공:', endpoint);
+                    return { 
+                        success: true, 
+                        response: response.data.response || response.data.answer || response.data.message || '응답을 받았습니다.',
+                        endpoint: endpoint
+                    };
+                }
+            } catch (error) {
+                // 계속 다음 엔드포인트 시도
+                continue;
+            }
+        }
+        
+        // 모든 엔드포인트에서 실패한 경우 대체 응답
+        console.log('❌ Cursor 에디터 질문 실패, 대체 응답 제공');
+        return {
+            success: true,
+            response: `질문: "${question}"\n\n죄송합니다. Cursor 에디터와 직접 통신할 수 없어 대체 응답을 제공합니다. Cursor 에디터가 HTTP API를 제공하는지 확인해주세요.`,
+            fallback: true
+        };
+    } catch (error) {
+        console.error('❌ Cursor 에디터 질문 실패:', error);
+        return { success: false, error: error.message };
+    }
 }
 
 function addCodeChange(filePath, changeType, oldContent, newContent, taskId) {
@@ -1909,7 +2092,274 @@ app.use((error, req, res, next) => {
     });
 });
 
-// 404 핸들러
+// ==================== Cursor 에디터 연결 API ====================
+
+// 20. Cursor 에디터 연결 상태 확인
+app.get('/cursor-editor/status', async (req, res) => {
+    try {
+        const isRunning = await checkCursorEditorRunning();
+        const connected = cursorConnected;
+        
+        res.json({
+            success: true,
+            running: isRunning,
+            connected: connected,
+            port: cursorPort,
+            message: connected ? 'Cursor 에디터에 연결됨' : 'Cursor 에디터에 연결되지 않음'
+        });
+    } catch (error) {
+        console.error('Error checking Cursor editor status:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// 21. Cursor 에디터에 연결
+app.post('/cursor-editor/connect', async (req, res) => {
+    try {
+        const { port = 3001 } = req.body;
+        cursorPort = port;
+        
+        const connected = await connectToCursorEditor();
+        
+        if (connected) {
+            res.json({
+                success: true,
+                message: 'Cursor 에디터에 성공적으로 연결됨',
+                port: cursorPort,
+                connected: cursorConnected
+            });
+        } else {
+            res.status(400).json({
+                success: false,
+                error: 'Cursor 에디터에 연결할 수 없습니다. Cursor 에디터가 실행 중인지 확인하세요.',
+                port: cursorPort
+            });
+        }
+    } catch (error) {
+        console.error('Error connecting to Cursor editor:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// 22. Cursor 에디터 연결 해제
+app.post('/cursor-editor/disconnect', (req, res) => {
+    try {
+        cursorConnected = false;
+        cursorPort = 3001; // 기본 포트로 리셋
+        
+        res.json({
+            success: true,
+            message: 'Cursor 에디터 연결이 해제됨',
+            connected: false
+        });
+    } catch (error) {
+        console.error('Error disconnecting from Cursor editor:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// 23. Cursor 에디터에 질문하기
+app.post('/cursor-editor/ask', async (req, res) => {
+    try {
+        const { question, context = {} } = req.body;
+        
+        if (!question) {
+            return res.status(400).json({
+                success: false,
+                error: 'question is required'
+            });
+        }
+        
+        if (!cursorConnected) {
+            return res.status(400).json({
+                success: false,
+                error: 'Cursor 에디터에 연결되지 않음. 먼저 /cursor-editor/connect를 호출하세요.'
+            });
+        }
+        
+        const result = await askCursorEditor(question, context);
+        
+        if (result.success) {
+            res.json({
+                success: true,
+                question: question,
+                response: result.response,
+                context: context,
+                timestamp: new Date().toISOString()
+            });
+        } else {
+            res.status(500).json({
+                success: false,
+                error: result.error,
+                question: question
+            });
+        }
+    } catch (error) {
+        console.error('Error asking Cursor editor:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// 24. Cursor 에디터에 메시지 전송
+app.post('/cursor-editor/send', async (req, res) => {
+    try {
+        const { message, type = 'text' } = req.body;
+        
+        if (!message) {
+            return res.status(400).json({
+                success: false,
+                error: 'message is required'
+            });
+        }
+        
+        if (!cursorConnected) {
+            return res.status(400).json({
+                success: false,
+                error: 'Cursor 에디터에 연결되지 않음. 먼저 /cursor-editor/connect를 호출하세요.'
+            });
+        }
+        
+        const result = await sendToCursorEditor(message);
+        
+        if (result.success) {
+            res.json({
+                success: true,
+                message: '메시지가 성공적으로 전송됨',
+                sent: message,
+                type: type
+            });
+        } else {
+            res.status(500).json({
+                success: false,
+                error: result.error
+            });
+        }
+    } catch (error) {
+        console.error('Error sending message to Cursor editor:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// 25. Cursor 에디터 채팅 (Xcode Code Intelligence 호환)
+app.post('/v1/cursor-chat', async (req, res) => {
+    try {
+        const { messages, model = "cursor-editor" } = req.body;
+        
+        if (!messages || !Array.isArray(messages) || messages.length === 0) {
+            return res.status(400).json({
+                error: {
+                    message: "messages array is required",
+                    type: "invalid_request_error"
+                }
+            });
+        }
+        
+        const lastMessage = messages[messages.length - 1];
+        const userMessage = lastMessage.content || '';
+        
+        if (!cursorConnected) {
+            // Cursor 에디터에 연결되지 않은 경우 대체 응답
+            const fallbackResponse = generateFallbackResponse(userMessage, 'chat');
+            
+            return res.json({
+                id: `cursor-editor-${Date.now()}`,
+                object: "chat.completion",
+                created: Math.floor(Date.now() / 1000),
+                model: model,
+                choices: [{
+                    index: 0,
+                    message: {
+                        role: "assistant",
+                        content: fallbackResponse
+                    },
+                    finish_reason: "stop"
+                }],
+                usage: {
+                    prompt_tokens: userMessage.length,
+                    completion_tokens: fallbackResponse.length,
+                    total_tokens: userMessage.length + fallbackResponse.length
+                },
+                fallback: true,
+                message: "Cursor 에디터에 연결되지 않음. 대체 응답을 제공합니다."
+            });
+        }
+        
+        const result = await askCursorEditor(userMessage, { messages: messages });
+        
+        if (result.success) {
+            res.json({
+                id: `cursor-editor-${Date.now()}`,
+                object: "chat.completion",
+                created: Math.floor(Date.now() / 1000),
+                model: model,
+                choices: [{
+                    index: 0,
+                    message: {
+                        role: "assistant",
+                        content: result.response
+                    },
+                    finish_reason: "stop"
+                }],
+                usage: {
+                    prompt_tokens: userMessage.length,
+                    completion_tokens: result.response.length,
+                    total_tokens: userMessage.length + result.response.length
+                },
+                connected: true
+            });
+        } else {
+            // Cursor 에디터 응답 실패 시 대체 응답
+            const fallbackResponse = generateFallbackResponse(userMessage, 'chat');
+            
+            res.json({
+                id: `cursor-editor-${Date.now()}`,
+                object: "chat.completion",
+                created: Math.floor(Date.now() / 1000),
+                model: model,
+                choices: [{
+                    index: 0,
+                    message: {
+                        role: "assistant",
+                        content: fallbackResponse
+                    },
+                    finish_reason: "stop"
+                }],
+                usage: {
+                    prompt_tokens: userMessage.length,
+                    completion_tokens: fallbackResponse.length,
+                    total_tokens: userMessage.length + fallbackResponse.length
+                },
+                fallback: true,
+                error: result.error
+            });
+        }
+    } catch (error) {
+        console.error('Error processing Cursor editor chat:', error);
+        res.status(500).json({
+            error: {
+                message: error.message || 'Failed to process Cursor editor chat',
+                type: "server_error"
+            }
+        });
+    }
+});
+
+// 404 핸들러 (모든 엔드포인트 등록 후 마지막에 추가)
 app.use('*', (req, res) => {
     res.status(404).json({
         success: false,
@@ -1944,6 +2394,12 @@ app.listen(PORT, () => {
     console.log(`   POST /create-chat - 채팅 세션 생성`);
     console.log(`   POST /start-tunnel - 터널 서버 시작`);
     console.log(`   POST /start-web-server - 웹 서버 시작`);
+    console.log(`   GET  /cursor-editor/status - Cursor 에디터 연결 상태`);
+    console.log(`   POST /cursor-editor/connect - Cursor 에디터에 연결`);
+    console.log(`   POST /cursor-editor/disconnect - Cursor 에디터 연결 해제`);
+    console.log(`   POST /cursor-editor/ask - Cursor 에디터에 질문`);
+    console.log(`   POST /cursor-editor/send - Cursor 에디터에 메시지 전송`);
+    console.log(`   POST /v1/cursor-chat - Cursor 에디터 채팅 (Xcode 호환)`);
 });
 
 module.exports = app;

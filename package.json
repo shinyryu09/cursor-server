@@ -11,17 +11,24 @@
     "format:check": "echo \"No formatting configured\" && exit 0",
     "build": "echo \"No build process needed\" && exit 0"
   },
-  "keywords": ["cursor", "xcode", "code-intelligence", "nodejs", "express"],
+  "keywords": [
+    "cursor",
+    "xcode",
+    "code-intelligence",
+    "nodejs",
+    "express"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.18.2",
-    "cors": "^2.8.5",
-    "body-parser": "^1.20.2",
     "axios": "^1.6.0",
+    "body-parser": "^1.20.2",
     "child_process": "^1.0.2",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "fs": "^0.0.1-security",
     "path": "^0.12.7",
-    "fs": "^0.0.1-security"
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
