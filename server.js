@@ -451,9 +451,9 @@ async function executeCursorCLI(command, workingDir) {
                 success: true,
                 stdout: stdout,
                 stderr: stderr
-            });
-            }
         });
+    }
+});
     });
 }
 
@@ -513,6 +513,52 @@ private extension Color {
 이 코드를 파일 상단에 추가하면 DS 스코프 오류가 해결됩니다.`;
     }
     
+    // ScorecardView 스코프 오류 해결 요청
+    if (lowerMessage.includes('cannot find') && lowerMessage.includes('scorecardview') && lowerMessage.includes('scope')) {
+        return `ScorecardView 스코프 오류를 해결하기 위해 다음 방법들을 시도해보세요:
+
+## 해결 방법 1: ScorecardView 파일 확인
+프로젝트에 \`ScorecardView.swift\` 파일이 있는지 확인하세요. 파일이 없다면 생성해야 합니다.
+
+## 해결 방법 2: ScorecardView 구조체 정의
+\`ScorecardView.swift\` 파일에 다음 코드를 추가하세요:
+
+\`\`\`swift
+import SwiftUI
+
+struct ScorecardView: View {
+    var body: some View {
+        VStack {
+            Text("Scorecard")
+                .font(.largeTitle)
+                .padding()
+            
+            // 여기에 스코어카드 내용을 추가하세요
+            Text("스코어카드 내용이 여기에 표시됩니다.")
+                .foregroundColor(.secondary)
+        }
+        .navigationTitle("Scorecard")
+    }
+}
+
+#Preview {
+    ScorecardView()
+}
+\`\`\`
+
+## 해결 방법 3: Import 문 확인
+\`ContentView.swift\` 파일 상단에 필요한 import 문이 있는지 확인하세요:
+
+\`\`\`swift
+import SwiftUI
+\`\`\`
+
+## 해결 방법 4: 프로젝트 타겟 확인
+\`ScorecardView.swift\` 파일이 프로젝트 타겟에 포함되어 있는지 확인하세요. Xcode에서 파일을 선택하고 "File Inspector"에서 "Target Membership"을 확인하세요.
+
+이 중 하나의 방법으로 ScorecardView 스코프 오류를 해결할 수 있습니다.`;
+    }
+    
     // 작업 경로 관련 질문
     if (lowerMessage.includes('현재 작업 경로') || lowerMessage.includes('작업 디렉토리') || 
         lowerMessage.includes('working directory') || lowerMessage.includes('프로젝트 경로')) {
@@ -563,10 +609,10 @@ function parseUserMessage(messages) {
         // 객체 형태의 메시지 처리
         if (lastMessage.content.text) {
             userMessage = lastMessage.content.text;
-                        } else {
-            userMessage = JSON.stringify(lastMessage.content);
-                        }
                     } else {
+            userMessage = JSON.stringify(lastMessage.content);
+                    }
+                } else {
         userMessage = String(lastMessage.content || '');
     }
     
