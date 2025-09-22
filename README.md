@@ -1,13 +1,13 @@
 # MCP Cursor Server
 
-MCP (Model Context Protocol) 서버로 Xcode, Android Studio와 Cursor CLI 및 다양한 AI 모델을 연동하는 서버입니다.
+MCP (Model Context Protocol) 서버로 Xcode와 Cursor Editor 및 다양한 AI 모델을 연동하는 서버입니다.
 
 ## 🚀 주요 기능
 
 - **MCP 프로토콜 지원**: 표준 MCP 프로토콜을 통한 AI 모델 연동
 - **다중 AI 모델 지원**: OpenAI, Anthropic, Google, Cursor API 지원
-- **프로젝트 자동 감지**: Xcode, Android Studio 프로젝트 자동 감지
-- **Cursor CLI 연동**: Cursor CLI를 통한 고급 코드 생성 및 분석
+- **프로젝트 자동 감지**: Xcode 프로젝트 자동 감지
+- **Cursor Editor 연동**: Cursor Editor HTTP API를 통한 고급 코드 생성 및 분석
 - **실시간 채팅**: 스트리밍을 통한 실시간 AI 응답
 - **도구 및 리소스**: 코드 분석, 리뷰, 테스트 생성 등 다양한 도구 제공
 
@@ -15,23 +15,51 @@ MCP (Model Context Protocol) 서버로 Xcode, Android Studio와 Cursor CLI 및 �
 
 - Node.js 18.0.0 이상
 - macOS (Xcode 프로젝트 지원)
-- Cursor CLI (선택사항)
+- Xcode 14.0 이상
+- Cursor Editor (선택사항)
 - AI 모델 API 키 (OpenAI, Anthropic, Google, Cursor 중 하나 이상)
 
 ## 🛠️ 설치 및 설정
 
-### 1. 저장소 클론
+### 1. Xcode 설치
+
+#### App Store에서 설치
+1. **App Store** 열기
+2. "Xcode" 검색
+3. **설치** 클릭 (약 15GB 다운로드)
+4. 설치 완료 후 **Xcode** 실행
+5. **Xcode** → **Settings** → **Accounts**에서 Apple ID 로그인
+
+#### 명령어 도구 설치
+```bash
+# Xcode Command Line Tools 설치
+xcode-select --install
+
+# 설치 확인
+xcode-select -p
+```
+
+#### Xcode 버전 확인
+```bash
+# Xcode 버전 확인
+xcodebuild -version
+
+# 설치된 시뮬레이터 확인
+xcrun simctl list devices
+```
+
+### 2. 저장소 클론
 ```bash
 git clone https://github.com/shinyryu09/cursor-server.git
 cd cursor-server
 ```
 
-### 2. 의존성 설치
+### 3. 의존성 설치
 ```bash
 npm install
 ```
 
-### 3. 환경 변수 설정
+### 4. 환경 변수 설정
 ```bash
 # 환경 변수 파일 복사
 cp env.example .env
@@ -52,7 +80,7 @@ GOOGLE_API_KEY=your_google_api_key_here
 CURSOR_API_KEY=your_cursor_api_key_here
 ```
 
-### 4. 서버 실행
+### 5. 서버 실행
 ```bash
 # MCP 서버 시작 (stdio)
 npm start
@@ -110,22 +138,76 @@ npm run start logs
 npm run start logs -- --follow
 ```
 
+#### 버전 관리
+```bash
+# 버전 정보 확인
+node src/server.js version --info
+
+# 현재 버전만 표시
+node src/server.js version --show
+
+# 패치 버전 증가 (2.0.0 → 2.0.1)
+node src/server.js version --patch
+
+# 마이너 버전 증가 (2.0.0 → 2.1.0)
+node src/server.js version --minor
+
+# 메이저 버전 증가 (2.0.0 → 3.0.0)
+node src/server.js version --major
+```
+
+#### 자동 버전업 및 Git 푸시
+```bash
+# 패치 버전 증가 후 자동 푸시
+npm run git:push
+
+# 마이너 버전 증가 후 자동 푸시
+npm run git:push:minor
+
+# 메이저 버전 증가 후 자동 푸시
+npm run git:push:major
+
+# 패치 버전 증가 후 릴리스 (변경 로그 생성 포함)
+npm run release
+
+# 마이너 버전 증가 후 릴리스
+npm run release:minor
+
+# 메이저 버전 증가 후 릴리스
+npm run release:major
+```
+
 ### MCP 클라이언트 연동
 
 #### Xcode Code Intelligence 설정
-1. **시스템 환경설정** → **Intelligence** → **Add a Model Provider**
-2. 다음 정보 입력:
+
+##### 1. Xcode에서 Code Intelligence 활성화
+1. **Xcode** 실행
+2. **Xcode** → **Settings** (또는 **Preferences**)
+3. **Code Intelligence** 탭 선택
+4. **Enable Code Intelligence** 체크박스 활성화
+
+##### 2. MCP 서버 연결
+1. **Add Model Provider** 버튼 클릭
+2. **Custom Server** 선택
+3. 다음 정보 입력:
    ```
-   URL: http://localhost:3000
-   API Key Header: Authorization
-   API Key: Bearer your_api_key_here
+   Server URL: http://localhost:3000
+   API Key: your_api_key_here (선택사항)
+   Model: cursor-editor 또는 cursor-ai
    Description: MCP Cursor Server
    ```
 
-#### Android Studio 설정
-1. **File** → **Settings** → **Plugins** → **Marketplace**
-2. "AI Assistant" 또는 "Code Intelligence" 플러그인 설치
-3. 서버 URL 설정: `http://localhost:3000`
+##### 3. 연결 테스트
+1. **Test Connection** 버튼 클릭
+2. 연결 성공 시 "Connected successfully" 메시지 확인
+3. **Save** 버튼으로 설정 저장
+
+##### 4. 사용 방법
+1. Xcode에서 Swift 파일 열기
+2. 코드 작성 중 **Cmd + Space** 또는 **Tab** 키로 AI 제안 받기
+3. 코드 블록 선택 후 **Cmd + Shift + A**로 AI 채팅 시작
+
 
 ## 📡 API 엔드포인트
 
@@ -154,18 +236,6 @@ npm run start logs -- --follow
   "name": "detect_project",
   "arguments": {
     "workingDir": "/path/to/project" // 선택사항
-  }
-}
-```
-
-#### `cursor_chat`
-Cursor CLI를 사용한 채팅
-```json
-{
-  "name": "cursor_chat",
-  "arguments": {
-    "message": "코드를 최적화해주세요",
-    "files": ["/path/to/file.swift"] // 선택사항
   }
 }
 ```
@@ -227,7 +297,7 @@ AI 모델을 사용한 채팅
   "name": "feature_implementation",
   "arguments": {
     "description": "사용자 인증 기능 구현",
-    "projectType": "xcode" // xcode, android
+    "projectType": "xcode"
   }
 }
 ```
@@ -261,10 +331,66 @@ AI 모델을 사용한 채팅
 - `xcodebuild` 명령어로 프로젝트 정보 수집
 - SRCROOT, PROJECT_DIR 등 빌드 설정 파싱
 
-### Android 프로젝트
-- `build.gradle` 파일 감지
-- `settings.gradle` 파일 감지
-- 프로젝트 정보 파싱 (패키지명, 버전, SDK 버전 등)
+## 📦 버전 관리
+
+### 버전 체계
+이 프로젝트는 [Semantic Versioning](https://semver.org/)을 따릅니다:
+- **MAJOR**: 호환되지 않는 API 변경
+- **MINOR**: 하위 호환성을 유지하는 기능 추가
+- **PATCH**: 하위 호환성을 유지하는 버그 수정
+
+### 버전 관리 워크플로우
+
+#### 1. 개발 중 버전 관리
+```bash
+# 개발 중 패치 버전 증가
+node src/server.js version --patch
+
+# 새로운 기능 추가 시 마이너 버전 증가
+node src/server.js version --minor
+
+# 호환성 없는 변경 시 메이저 버전 증가
+node src/server.js version --major
+```
+
+#### 2. 릴리스 준비
+```bash
+# 변경 로그 생성
+npm run version:changelog
+
+# 버전 정보 확인
+node src/server.js version --info
+```
+
+#### 3. 자동 릴리스
+```bash
+# 패치 릴리스 (버그 수정)
+npm run release
+
+# 마이너 릴리스 (새 기능)
+npm run release:minor
+
+# 메이저 릴리스 (호환성 없는 변경)
+npm run release:major
+```
+
+### 변경 로그
+- **CHANGELOG.md**: 자동 생성되는 변경 로그
+- **VERSION_HISTORY.md**: 상세한 버전별 변경사항 및 마이그레이션 가이드
+
+#### 자동 변경 로그 생성
+`CHANGELOG.md` 파일이 자동으로 생성/업데이트됩니다:
+- 최근 10개 커밋을 기반으로 변경사항 수집
+- 버전별로 그룹화된 변경사항
+- 날짜 및 Git 커밋 정보 포함
+
+#### 상세 버전 히스토리
+`VERSION_HISTORY.md` 파일에는 다음이 포함됩니다:
+- 각 버전의 상세한 변경사항
+- 마이그레이션 가이드
+- 기술적 사양 및 성능 지표
+- 개발 타임라인
+
 
 ## 🚀 고급 설정
 

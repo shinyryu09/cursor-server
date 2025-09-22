@@ -42,42 +42,56 @@ export class MCPServer {
   }
 
   /**
+   * 서비스 초기화
+   */
+  async initialize() {
+    await this.cursorService.initialize();
+    logger.info('MCP 서버 서비스 초기화 완료');
+  }
+
+  /**
    * MCP 핸들러 설정
    */
   setupHandlers() {
     // 초기화 핸들러
-    this.server.setRequestHandler('initialize', async (request) => {
-      logger.info('MCP 서버 초기화 요청');
-      
-      // 프로젝트 감지
-      const project = await this.projectDetector.detectProject();
-      
-      return {
-        protocolVersion: '2024-11-05',
-        capabilities: {
-          resources: {
-            subscribe: true,
-            listChanged: true
+    this.server.setRequestHandler({
+      method: 'initialize',
+      handler: async (request) => {
+        logger.info('MCP 서버 초기화 요청');
+        
+        // 프로젝트 감지
+        const project = await this.projectDetector.detectProject();
+        
+        return {
+          protocolVersion: '2024-11-05',
+          capabilities: {
+            resources: {
+              subscribe: true,
+              listChanged: true
+            },
+            tools: {
+              listChanged: true
+            },
+            prompts: {
+              listChanged: true
+            }
           },
-          tools: {
-            listChanged: true
+          serverInfo: {
+            name: config.mcp.name,
+            version: config.mcp.version,
+            description: config.mcp.description
           },
-          prompts: {
-            listChanged: true
-          }
-        },
-        serverInfo: {
-          name: config.mcp.name,
-          version: config.mcp.version,
-          description: config.mcp.description
-        },
-        project: project
-      };
+          project: project
+        };
+      }
     });
 
     // 핑 핸들러
-    this.server.setRequestHandler('ping', async () => {
-      return { pong: true };
+    this.server.setRequestHandler({
+      method: 'ping',
+      handler: async () => {
+        return { pong: true };
+      }
     });
 
     // 리소스 핸들러
@@ -446,6 +460,9 @@ export class MCPServer {
    */
   async start() {
     try {
+      // 서비스 초기화
+      await this.initialize();
+      
       const transport = new StdioServerTransport();
       await this.server.connect(transport);
       logger.info('MCP 서버가 시작되었습니다');

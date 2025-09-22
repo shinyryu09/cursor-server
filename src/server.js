@@ -7,7 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
-import MCPServer from './core/mcpServer.js';
+import HttpMCPServer from './core/httpServer.js';
 import logger from './utils/logger.js';
 import config from './config/config.js';
 
@@ -80,6 +80,19 @@ class Application {
       .action(async (options) => {
         await this.showLogs(options);
       });
+
+    // 버전 관리 명령어
+    this.program
+      .command('version')
+      .description('Version management commands')
+      .option('-i, --info', 'Show version information')
+      .option('-p, --patch', 'Increment patch version')
+      .option('-m, --minor', 'Increment minor version')
+      .option('-M, --major', 'Increment major version')
+      .option('--show', 'Show current version')
+      .action(async (options) => {
+        await this.handleVersion(options);
+      });
   }
 
   /**
@@ -94,8 +107,8 @@ class Application {
       // 로그 디렉토리 생성
       await this.ensureLogDirectory();
 
-      // MCP 서버 생성
-      this.mcpServer = new MCPServer();
+      // HTTP MCP 서버 생성
+      this.mcpServer = new HttpMCPServer();
 
       // 서버 시작
       await this.mcpServer.start();
@@ -300,6 +313,124 @@ class Application {
     } catch (error) {
       console.error(chalk.red.bold('❌ 로그 표시 실패:'), error.message);
       logger.error('로그 표시 실패:', error);
+    }
+  }
+
+  /**
+   * 버전 관리 핸들러
+   */
+  async handleVersion(options) {
+    try {
+      if (options.info) {
+        await this.showVersionInfo();
+      } else if (options.patch) {
+        await this.incrementVersion('patch');
+      } else if (options.minor) {
+        await this.incrementVersion('minor');
+      } else if (options.major) {
+        await this.incrementVersion('major');
+      } else if (options.show) {
+        await this.showCurrentVersion();
+      } else {
+        // 기본적으로 버전 정보 표시
+        await this.showVersionInfo();
+      }
+    } catch (error) {
+      console.error(chalk.red.bold('❌ 버전 관리 실패:'), error.message);
+      logger.error('버전 관리 실패:', error);
+      process.exit(1);
+    }
+  }
+
+  /**
+   * 버전 정보 표시
+   */
+  async showVersionInfo() {
+    try {
+      const packageJson = JSON.parse(await fs.readFile('./package.json', 'utf8'));
+      const currentVersion = packageJson.version;
+      
+      console.log(chalk.blue.bold('📦 MCP Cursor Server - 버전 정보'));
+      console.log(chalk.gray('=' .repeat(50)));
+      
+      console.log(chalk.cyan('현재 버전:'), chalk.white.bold(`v${currentVersion}`));
+      
+      // Git 정보 수집
+      try {
+        const { execSync } = await import('child_process');
+        const gitBranch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
+        const gitCommit = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
+        const gitStatus = execSync('git status --porcelain', { encoding: 'utf8' }).trim();
+        const lastCommit = execSync('git log -1 --pretty=format:"%h - %an, %ar : %s"', { encoding: 'utf8' }).trim();
+        
+        console.log(chalk.cyan('Git 브랜치:'), chalk.white(gitBranch));
+        console.log(chalk.cyan('커밋 해시:'), chalk.white(gitCommit));
+        console.log(chalk.cyan('마지막 커밋:'), chalk.white(lastCommit));
+        
+        if (gitStatus.length > 0) {
+          console.log(chalk.yellow('📝 상태:'), chalk.yellow('변경사항 있음'));
+        } else {
+          console.log(chalk.green('✅ 상태:'), chalk.green('변경사항 없음'));
+        }
+      } catch (error) {
+        console.log(chalk.yellow('⚠️  Git 정보를 가져올 수 없습니다.'));
+      }
+      
+      // 버전 관리 명령어 안내
+      console.log(chalk.gray('\n' + '=' .repeat(50)));
+      console.log(chalk.blue.bold('📋 버전 관리 명령어:'));
+      console.log(chalk.gray('  node src/server.js version --patch    - 패치 버전 증가 (2.0.0 → 2.0.1)'));
+      console.log(chalk.gray('  node src/server.js version --minor    - 마이너 버전 증가 (2.0.0 → 2.1.0)'));
+      console.log(chalk.gray('  node src/server.js version --major    - 메이저 버전 증가 (2.0.0 → 3.0.0)'));
+      console.log(chalk.gray('  npm run git:push                      - 패치 버전 증가 후 푸시'));
+      console.log(chalk.gray('  npm run release                       - 패치 버전 증가 후 릴리스'));
+      
+    } catch (error) {
+      throw new Error(`버전 정보 표시 실패: ${error.message}`);
+    }
+  }
+
+  /**
+   * 현재 버전 표시
+   */
+  async showCurrentVersion() {
+    try {
+      const packageJson = JSON.parse(await fs.readFile('./package.json', 'utf8'));
+      console.log(packageJson.version);
+    } catch (error) {
+      throw new Error(`버전 표시 실패: ${error.message}`);
+    }
+  }
+
+  /**
+   * 버전 증가
+   */
+  async incrementVersion(type) {
+    try {
+      const { execSync } = await import('child_process');
+      
+      console.log(chalk.blue(`🔄 ${type} 버전을 증가시킵니다...`));
+      
+      // npm version 명령어 실행
+      execSync(`npm version ${type} --no-git-tag-version`, { stdio: 'inherit' });
+      
+      // 새로운 버전 읽기
+      const packageJson = JSON.parse(await fs.readFile('./package.json', 'utf8'));
+      const newVersion = packageJson.version;
+      
+      console.log(chalk.green.bold(`✅ 버전이 v${newVersion}으로 업데이트되었습니다!`));
+      
+      // 변경사항을 Git에 추가
+      try {
+        execSync('git add package.json', { stdio: 'inherit' });
+        execSync(`git commit -m "chore: bump version to v${newVersion}"`, { stdio: 'inherit' });
+        console.log(chalk.green('✅ Git에 커밋되었습니다.'));
+      } catch (error) {
+        console.log(chalk.yellow('⚠️  Git 커밋 실패 (변경사항은 저장됨):'), error.message);
+      }
+      
+    } catch (error) {
+      throw new Error(`버전 증가 실패: ${error.message}`);
     }
   }
 
