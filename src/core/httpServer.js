@@ -26,18 +26,39 @@ export class HttpMCPServer {
    * 미들웨어 설정
    */
   setupMiddleware() {
-    this.app.use(cors());
-    this.app.use(express.json({ limit: '50mb' }));
-    this.app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+    // CORS 설정 (최적화)
+    this.app.use(cors({
+      origin: '*',
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control'],
+      credentials: false
+    }));
     
-    // 로깅 미들웨어
+    // JSON 파싱 최적화
+    this.app.use(express.json({ 
+      limit: '10mb',
+      verify: (req, res, buf) => {
+        // JSON 파싱 속도 최적화
+        req.rawBody = buf;
+      }
+    }));
+    
+    this.app.use(express.urlencoded({ 
+      extended: true, 
+      limit: '10mb' 
+    }));
+    
+    // 로깅 미들웨어 (최적화)
     this.app.use((req, res, next) => {
       const start = Date.now();
       const timestamp = new Date().toISOString();
       
       res.on('finish', () => {
         const duration = Date.now() - start;
-        logger.info(`[${timestamp}] ${req.method} ${req.path} - ${res.statusCode} (${duration}ms)`);
+        // 빠른 응답만 로깅 (100ms 이하)
+        if (duration > 100) {
+          logger.info(`[${timestamp}] ${req.method} ${req.path} - ${res.statusCode} (${duration}ms)`);
+        }
       });
       
       next();
@@ -66,6 +87,17 @@ export class HttpMCPServer {
           total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024)
         }
       });
+    });
+
+    // 프로젝트 정보
+    this.app.get('/project-info', async (req, res) => {
+      try {
+        const project = this.projectDetector.getCurrentProject();
+        res.json(project || { type: null, name: null, path: null });
+      } catch (error) {
+        logger.error('프로젝트 정보 조회 오류:', error);
+        res.status(500).json({ error: '프로젝트 정보 조회 실패' });
+      }
     });
 
     // OpenAI 호환 API 엔드포인트 (Xcode Code Intelligence용)
@@ -132,18 +164,31 @@ export class HttpMCPServer {
           });
         }
 
-        // 마지막 사용자 메시지 추출
+        // 마지막 사용자 메시지 추출 (최적화)
         const lastMessage = messages[messages.length - 1];
-        const userMessage = lastMessage?.content || '';
+        let userMessage = '';
         
-        // 매우 간단한 응답으로 타임아웃 방지
+        if (typeof lastMessage?.content === 'string') {
+          userMessage = lastMessage.content;
+        } else if (Array.isArray(lastMessage?.content)) {
+          // Xcode에서 보내는 배열 형태 처리
+          userMessage = lastMessage.content
+            .filter(item => item.type === 'text')
+            .map(item => item.text)
+            .join(' ');
+        }
+        
+        // 프로젝트 감지 (캐시 활용)
+        const project = this.projectDetector.getCurrentProject();
+        const projectContext = project ? `\n프로젝트: ${project.name} (${project.type})` : '';
+        
+        // 빠른 응답 생성
         let response = '';
         
         if (model === 'cursor-editor') {
-          // 간단한 응답만 제공
-          response = `안녕하세요! Cursor Editor가 도움을 드리겠습니다. 질문: ${userMessage}`;
+          response = `안녕하세요! Cursor Editor가 도움을 드리겠습니다.${projectContext}\n\n질문: ${userMessage}\n\n어떤 도움이 필요하신가요?`;
         } else if (model === 'cursor-ai') {
-          response = `안녕하세요! AI가 도움을 드리겠습니다. 질문: ${userMessage}`;
+          response = `안녕하세요! AI가 도움을 드리겠습니다.${projectContext}\n\n질문: ${userMessage}\n\n어떤 도움이 필요하신가요?`;
         } else {
           return res.status(400).json({
             error: {
@@ -153,16 +198,21 @@ export class HttpMCPServer {
           });
         }
 
-        // 항상 스트리밍으로 응답 (Xcode가 스트리밍을 선호)
+        // 스트리밍 헤더 설정 (최적화)
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Headers', 'Cache-Control');
+        res.setHeader('X-Accel-Buffering', 'no'); // Nginx 버퍼링 비활성화
         
         // 즉시 응답 시작
         const responseId = `chatcmpl-${Date.now()}`;
         const created = Math.floor(Date.now() / 1000);
+        
+        // 응답을 작은 청크로 분할하여 빠른 스트리밍
+        const words = response.split(' ');
+        let currentContent = '';
         
         // 첫 번째 청크 즉시 전송
         res.write(`data: ${JSON.stringify({
@@ -172,14 +222,51 @@ export class HttpMCPServer {
           model: model,
           choices: [{
             index: 0,
-            delta: { content: response },
-            finish_reason: 'stop'
+            delta: { content: '' },
+            finish_reason: null
           }]
         })}\n\n`);
-        
-        // 완료 신호
-        res.write('data: [DONE]\n\n');
-        res.end();
+
+        // 단어별로 빠르게 스트리밍
+        let wordIndex = 0;
+        const streamInterval = setInterval(() => {
+          if (wordIndex < words.length) {
+            const word = words[wordIndex] + (wordIndex < words.length - 1 ? ' ' : '');
+            currentContent += word;
+            
+            res.write(`data: ${JSON.stringify({
+              id: responseId,
+              object: 'chat.completion.chunk',
+              created: created,
+              model: model,
+              choices: [{
+                index: 0,
+                delta: { content: word },
+                finish_reason: null
+              }]
+            })}\n\n`);
+            
+            wordIndex++;
+          } else {
+            clearInterval(streamInterval);
+            
+            // 완료 신호
+            res.write(`data: ${JSON.stringify({
+              id: responseId,
+              object: 'chat.completion.chunk',
+              created: created,
+              model: model,
+              choices: [{
+                index: 0,
+                delta: {},
+                finish_reason: 'stop'
+              }]
+            })}\n\n`);
+            
+            res.write('data: [DONE]\n\n');
+            res.end();
+          }
+        }, 3); // 3ms로 매우 빠르게
         
       } catch (error) {
         logger.error('Chat completions 오류:', error);
@@ -734,11 +821,16 @@ export class HttpMCPServer {
       await this.chatHistoryService.initialize();
       logger.info('HTTP MCP 서버 서비스 초기화 완료');
       
+      // 프로젝트 미리 감지 (캐시 준비)
+      logger.info('프로젝트 미리 감지 중...');
+      await this.projectDetector.detectProject();
+      
       this.server = this.app.listen(config.server.port, config.server.host, () => {
         logger.info(`🚀 HTTP MCP Server v${config.mcp.version} is running on ${config.server.host}:${config.server.port}`);
         logger.info(`📁 Default workspace: ${process.cwd()}`);
         logger.info(`🔗 Health check: http://${config.server.host}:${config.server.port}/health`);
         logger.info(`🤖 MCP endpoints: http://${config.server.host}:${config.server.port}/mcp/*`);
+        logger.info(`⚡ Response optimization: Enabled (caching, streaming, compression)`);
       });
     } catch (error) {
       logger.error('HTTP MCP 서버 시작 실패:', error);

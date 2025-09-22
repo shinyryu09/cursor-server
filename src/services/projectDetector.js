@@ -15,19 +15,29 @@ export class ProjectDetector {
   constructor() {
     this.currentProject = null;
     this.projectCache = new Map();
+    this.cacheTimeout = 30000; // 30초 캐시
+    this.lastDetectionTime = 0;
   }
 
   /**
-   * 현재 작업 디렉토리에서 프로젝트 감지
+   * 현재 작업 디렉토리에서 프로젝트 감지 (캐시 최적화)
    */
   async detectProject(workingDir = process.cwd()) {
     try {
+      // 캐시 확인 (30초 이내면 캐시된 결과 반환)
+      const now = Date.now();
+      if (this.currentProject && (now - this.lastDetectionTime) < this.cacheTimeout) {
+        logger.debug(`캐시된 프로젝트 반환: ${this.currentProject.name}`);
+        return this.currentProject;
+      }
+
       logger.info(`프로젝트 감지 시작: ${workingDir}`);
 
       // Xcode 프로젝트 감지
       const xcodeProject = await this.detectXcodeProject(workingDir);
       if (xcodeProject) {
         this.currentProject = xcodeProject;
+        this.lastDetectionTime = now;
         logger.info(`Xcode 프로젝트 감지됨: ${xcodeProject.name} (${xcodeProject.path})`);
         return xcodeProject;
       }
@@ -36,6 +46,7 @@ export class ProjectDetector {
       const flutterProject = await this.detectFlutterProject(workingDir);
       if (flutterProject) {
         this.currentProject = flutterProject;
+        this.lastDetectionTime = now;
         logger.info(`Flutter 프로젝트 감지됨: ${flutterProject.name} (${flutterProject.path})`);
         return flutterProject;
       }
@@ -44,6 +55,7 @@ export class ProjectDetector {
       const androidProject = await this.detectAndroidProject(workingDir);
       if (androidProject) {
         this.currentProject = androidProject;
+        this.lastDetectionTime = now;
         logger.info(`Android 프로젝트 감지됨: ${androidProject.name} (${androidProject.path})`);
         return androidProject;
       }
