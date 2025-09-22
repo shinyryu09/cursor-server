@@ -1,0 +1,59 @@
+name: Release Workflow
+
+on:
+  push:
+    branches: [ release/* ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., 1.2.3)'
+        required: true
+        type: string
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Use Node.js 18.x
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18.x'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run tests
+      run: npm test
+    
+    - name: Generate changelog
+      id: changelog
+      run: |
+        echo "## Changes in this release" > CHANGELOG.md
+        echo "" >> CHANGELOG.md
+        git log --oneline --since="1 month ago" >> CHANGELOG.md
+    
+    - name: Create Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.event.inputs.version || github.ref_name }}
+        release_name: Release ${{ github.event.inputs.version || github.ref_name }}
+        body_path: CHANGELOG.md
+        draft: false
+        prerelease: false
+    
+    - name: Update package.json version
+      run: |
+        npm version ${{ github.event.inputs.version || github.ref_name }} --no-git-tag-version
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add package.json
+        git commit -m "Bump version to ${{ github.event.inputs.version || github.ref_name }}"
+        git push
