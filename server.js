@@ -697,6 +697,15 @@ app.get('/v1/models', (req, res) => {
                 permission: [],
                 root: "cursor-cli-fast",
                 parent: null
+            },
+            {
+                id: "cursor-editor",
+                object: "model",
+                created: Math.floor(Date.now() / 1000),
+                owned_by: "cursor-server",
+                permission: [],
+                root: "cursor-editor",
+                parent: null
             }
         ],
         workspace: workspace
@@ -843,6 +852,11 @@ app.post('/v1/chat/completions', async (req, res) => {
         // 빠른 모델인 경우 빠른 응답 엔드포인트로 리다이렉트
         if (model === "cursor-cli-fast") {
             return res.redirect(307, '/v1/quick-chat');
+        }
+        
+        // Cursor 에디터 모델인 경우 Cursor 에디터 채팅 엔드포인트로 리다이렉트
+        if (model === "cursor-editor") {
+            return res.redirect(307, '/v1/cursor-chat');
         }
         
         if (!messages || !Array.isArray(messages) || messages.length === 0) {
