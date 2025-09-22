@@ -6,18 +6,21 @@ MCP (Model Context Protocol) 서버로 Xcode와 Cursor Editor 및 다양한 AI �
 
 - **MCP 프로토콜 지원**: 표준 MCP 프로토콜을 통한 AI 모델 연동
 - **다중 AI 모델 지원**: OpenAI, Anthropic, Google, Cursor API 지원
-- **프로젝트 자동 감지**: Xcode, Android, Flutter 프로젝트 자동 감지
+- **프로젝트 자동 감지**: Xcode, Android 프로젝트 자동 감지
 - **Cursor Editor 연동**: Cursor Editor HTTP API를 통한 고급 코드 생성 및 분석
-- **Flutter 지원**: Flutter 프로젝트 자동 감지 및 AI 모델 연동
 - **실시간 채팅**: 스트리밍을 통한 실시간 AI 응답
 - **도구 및 리소스**: 코드 분석, 리뷰, 테스트 생성 등 다양한 도구 제공
+- **🆕 스마트 캐시 시스템**: 토큰 사용량 최적화를 위한 다층 캐시 시스템
+  - 메모리 캐시 (LRU 정책)
+  - 디스크 캐시 (영구 저장)
+  - Redis 캐시 (분산 환경 지원)
+  - 자동 캐시 정리 및 유지보수
 
 ## 📋 전제 조건
 
 - Node.js 18.0.0 이상
 - macOS (Xcode 프로젝트 지원)
 - Xcode 14.0 이상 (iOS 개발용)
-- Flutter SDK (Flutter 개발용, 선택사항)
 - Cursor Editor (선택사항)
 - AI 모델 API 키 (OpenAI, Anthropic, Google, Cursor 중 하나 이상)
 
@@ -50,49 +53,7 @@ xcodebuild -version
 xcrun simctl list devices
 ```
 
-### 2. Flutter 설치 (선택사항)
-
-#### Flutter SDK 설치
-```bash
-# Flutter SDK 다운로드
-cd ~/Development
-git clone https://github.com/flutter/flutter.git -b stable
-
-# PATH에 Flutter 추가
-echo 'export PATH="$PATH:$HOME/Development/flutter/bin"' >> ~/.zshrc
-source ~/.zshrc
-
-# Flutter 설치 확인
-flutter doctor
-```
-
-#### Flutter 개발 환경 설정
-```bash
-# Flutter 의존성 설치
-flutter pub get
-
-# Flutter 프로젝트 생성
-flutter create my_flutter_app
-cd my_flutter_app
-
-# Flutter 앱 실행
-flutter run
-```
-
-#### Flutter 프로젝트 구조
-```
-my_flutter_app/
-├── lib/
-│   ├── main.dart
-│   └── ...
-├── pubspec.yaml
-├── analysis_options.yaml
-├── android/
-├── ios/
-└── test/
-```
-
-### 3. 저장소 클론
+### 2. 저장소 클론
 ```bash
 git clone https://github.com/shinyryu09/cursor-server.git
 cd cursor-server
@@ -126,9 +87,37 @@ CURSOR_API_KEY=your_cursor_api_key_here
 # Cursor Editor 연동 (선택사항)
 CURSOR_EDITOR_BASE_URL=http://localhost:5000
 CURSOR_EDITOR_API_KEY=your_cursor_editor_api_key_here
+
+# 캐시 설정 (토큰 사용량 최적화)
+CACHE_ENABLED=true
+CACHE_MAX_MEMORY_SIZE=100
+CACHE_MAX_DISK_SIZE=1000
+CACHE_DEFAULT_TTL=3600
+CACHE_CLEANUP_INTERVAL=300
+
+# AI 응답 캐시 설정
+CACHE_AI_RESPONSE=true
+CACHE_AI_RESPONSE_TTL=3600
+CACHE_INCLUDE_CONTEXT=true
+
+# 코드 생성 캐시 설정
+CACHE_CODE_GENERATION=true
+CACHE_CODE_GENERATION_TTL=7200
+
+# 코드 리뷰 캐시 설정
+CACHE_CODE_REVIEW=true
+CACHE_CODE_REVIEW_TTL=1800
+
+# Redis 캐시 설정 (선택사항)
+CACHE_REDIS_ENABLED=false
+CACHE_REDIS_HOST=localhost
+CACHE_REDIS_PORT=6379
+CACHE_REDIS_PASSWORD=
+CACHE_REDIS_DB=0
+CACHE_REDIS_TTL=3600
 ```
 
-### Cursor Editor API 키 설정
+### 5. Cursor Editor API 키 설정
 
 #### 1. Cursor Editor에서 API 키 생성
 1. **Cursor Editor** 실행
@@ -161,7 +150,7 @@ curl -H "Authorization: Bearer your_api_key" \
      http://localhost:5000/api/status
 ```
 
-### 5. 서버 실행
+### 6. 서버 실행
 ```bash
 # MCP 서버 시작 (stdio)
 npm start
@@ -171,6 +160,52 @@ npm start -- --http
 
 # 개발 모드
 npm run dev
+```
+
+## 🚀 스마트 캐시 시스템
+
+### 캐시 시스템 개요
+
+MCP Cursor Server는 토큰 사용량을 최적화하기 위한 다층 캐시 시스템을 제공합니다:
+
+- **메모리 캐시**: 빠른 응답을 위한 LRU (Least Recently Used) 정책
+- **디스크 캐시**: 영구 저장을 위한 파일 기반 캐시
+- **Redis 캐시**: 분산 환경을 위한 선택적 Redis 지원
+- **자동 정리**: 만료된 캐시 자동 정리 및 유지보수
+
+### 캐시 전략
+
+1. **AI 응답 캐시**: 동일한 질문에 대한 응답을 캐시하여 토큰 절약
+2. **코드 생성 캐시**: 유사한 요구사항의 코드 생성 결과 캐시
+3. **코드 리뷰 캐시**: 동일한 코드에 대한 리뷰 결과 캐시
+
+### 캐시 관리 도구
+
+MCP 도구를 통해 캐시를 관리할 수 있습니다:
+
+- `cache_stats`: 캐시 통계 조회
+- `cache_clear`: 캐시 전체 삭제
+- `cache_cleanup`: 만료된 캐시 정리
+- `cache_maintenance`: 수동 캐시 유지보수 실행
+- `cache_maintenance_status`: 캐시 유지보수 서비스 상태 조회
+
+### 캐시 설정 최적화
+
+```env
+# 기본 캐시 설정
+CACHE_ENABLED=true
+CACHE_MAX_MEMORY_SIZE=100      # 메모리 캐시 최대 항목 수
+CACHE_MAX_DISK_SIZE=1000       # 디스크 캐시 최대 항목 수
+CACHE_DEFAULT_TTL=3600         # 기본 TTL (초)
+
+# AI 응답 캐시 (1시간)
+CACHE_AI_RESPONSE_TTL=3600
+
+# 코드 생성 캐시 (2시간)
+CACHE_CODE_GENERATION_TTL=7200
+
+# 코드 리뷰 캐시 (30분)
+CACHE_CODE_REVIEW_TTL=1800
 ```
 
 ## 🔧 사용법
@@ -331,67 +366,6 @@ node src/server.js status
 #    타임아웃: 30000ms
 ```
 
-### Flutter 연동
-
-#### Flutter 프로젝트 감지
-MCP 서버는 자동으로 Flutter 프로젝트를 감지합니다:
-
-```bash
-# Flutter 프로젝트 감지 테스트
-node src/server.js detect
-
-# 출력 예시:
-# ✅ Flutter 프로젝트 감지됨: my_flutter_app (flutter)
-#    경로: /Users/developer/my_flutter_app
-#    버전: 1.0.0+1
-#    Flutter SDK: ^3.0.0
-```
-
-#### Flutter 프로젝트 정보
-```bash
-# 프로젝트 정보 조회
-curl http://localhost:3000/project-info
-
-# 응답 예시:
-{
-  "type": "flutter",
-  "name": "my_flutter_app",
-  "path": "/Users/developer/my_flutter_app",
-  "version": "1.0.0+1",
-  "description": "A new Flutter project",
-  "flutterVersion": "^3.0.0",
-  "dependencies": [
-    {"name": "flutter", "version": "sdk"},
-    {"name": "cupertino_icons", "version": "^1.0.2"}
-  ]
-}
-```
-
-#### Flutter AI 채팅
-```bash
-# Flutter 코드 질문
-curl -X POST http://localhost:3000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gpt-4",
-    "messages": [
-      {
-        "role": "user",
-        "content": "Flutter에서 StatefulWidget을 사용하는 방법을 알려주세요"
-      }
-    ]
-  }'
-```
-
-#### Flutter 프로젝트 설정
-```bash
-# Flutter 프로젝트 경로 설정
-curl -X POST http://localhost:3000/flutter/set-project \
-  -H "Content-Type: application/json" \
-  -d '{
-    "projectPath": "/Users/developer/my_flutter_app"
-  }'
-```
 
 ## 📡 API 엔드포인트
 
@@ -541,6 +515,193 @@ node src/server.js version --major
 npm run version:patch
 npm run version:minor
 npm run version:major
+```
+
+### 버전별 수정 사항
+- **[CHANGELOG.md](./CHANGELOG.md)**: 간단한 변경 로그
+- **[VERSION_HISTORY.md](./VERSION_HISTORY.md)**: 상세한 버전별 변경사항 및 마이그레이션 가이드
+- **[GIT_FLOW.md](./GIT_FLOW.md)**: Git Flow 브랜치 전략 및 워크플로우
+
+## 🚀 CI/CD 및 자동화
+
+### GitHub Actions 워크플로우
+
+이 프로젝트는 GitHub Actions를 사용하여 자동화된 CI/CD 파이프라인을 제공합니다.
+
+#### 주요 워크플로우
+- **CI/CD Pipeline** (`.github/workflows/ci-cd.yml`): 코드 품질 검사, 테스트, 보안 감사
+- **PR Validation** (`.github/workflows/pr-validation.yml`): Pull Request 검증 및 자동 리뷰
+- **Release** (`.github/workflows/release.yml`): 자동 릴리스 생성 및 배포
+
+#### 자동화된 작업
+- ✅ 코드 린팅 및 포맷팅 검사
+- ✅ 단위 테스트 실행
+- ✅ 보안 감사 (npm audit)
+- ✅ 버전 일관성 검사
+- ✅ 브레이킹 체인지 감지
+- ✅ 커밋 메시지 검증
+- ✅ 문서화 검사
+- ✅ 성능 검사
+
+### 릴리스 자동화
+
+#### 자동 릴리스 스크립트
+```bash
+# 패치 릴리스 (버그 수정)
+npm run release
+
+# 마이너 릴리스 (새 기능)
+npm run release:minor
+
+# 메이저 릴리스 (호환성 없는 변경)
+npm run release:major
+
+# 태그와 함께 릴리스
+npm run release:tag
+npm run release:tag:minor
+npm run release:tag:major
+```
+
+#### 릴리스 스크립트 기능
+- 🔄 자동 버전 증가
+- 📝 변경 로그 자동 생성
+- 🏷️ Git 태그 자동 생성
+- 📦 릴리스 아티팩트 생성
+- 🚀 GitHub 릴리스 자동 생성
+- 📊 릴리스 통계 생성
+
+### 변경 로그 자동 생성
+
+```bash
+# 변경 로그 생성
+npm run changelog:generate
+
+# 버전 정보 표시
+npm run version:info
+
+# 버전 히스토리 생성
+npm run version:history
+```
+
+#### 자동 생성되는 문서
+- **CHANGELOG.md**: Keep a Changelog 형식의 변경 로그
+- **VERSION_HISTORY.md**: 상세한 버전별 변경사항 및 마이그레이션 가이드
+- **릴리스 노트**: GitHub 릴리스에 자동 포함
+
+### Git Flow 정책
+
+이 프로젝트는 Git Flow 브랜치 전략을 사용합니다:
+
+#### 브랜치 구조
+- **main**: 프로덕션 배포 가능한 안정적인 코드
+- **develop**: 다음 릴리스를 위한 개발 통합 브랜치
+- **feature/***: 새로운 기능 개발
+- **release/***: 릴리스 준비
+- **hotfix/***: 긴급 버그 수정
+
+#### 커밋 메시지 규칙
+[Conventional Commits](https://www.conventionalcommits.org/) 규칙을 따릅니다:
+
+```bash
+# 기능 추가
+git commit -m "feat(api): add chat history management endpoints"
+
+# 버그 수정
+git commit -m "fix(server): resolve memory leak in streaming responses"
+
+# 문서 업데이트
+git commit -m "docs: update installation guide for macOS"
+
+# 리팩토링
+git commit -m "refactor(services): improve error handling in AI service"
+
+# 성능 개선
+git commit -m "perf(server): optimize response streaming performance"
+
+# CI/CD 변경
+git commit -m "ci: add automated release workflow"
+```
+
+### 브랜치 보호 규칙
+
+#### main 브랜치
+- 직접 푸시 금지
+- PR을 통한 병합만 허용
+- 최소 1명의 리뷰 승인 필요
+- CI/CD 통과 필수
+- base 브랜치와 동기화 필수
+
+#### develop 브랜치
+- 직접 푸시 금지
+- PR을 통한 병합만 허용
+- 코드 리뷰 권장
+- CI/CD 통과 필수
+
+### 자동화된 품질 관리
+
+#### 코드 품질
+- **ESLint**: JavaScript 코드 린팅
+- **Prettier**: 코드 포맷팅
+- **Husky**: Git 훅을 통한 자동 검사
+- **lint-staged**: 스테이징된 파일만 검사
+
+#### 테스트 자동화
+- **단위 테스트**: Jest를 사용한 자동 테스트
+- **통합 테스트**: API 엔드포인트 테스트
+- **성능 테스트**: 응답 시간 및 메모리 사용량 검사
+
+#### 보안 검사
+- **npm audit**: 의존성 취약점 검사
+- **Dependabot**: 의존성 자동 업데이트
+- **CodeQL**: 코드 보안 분석
+
+### 배포 자동화
+
+#### 환경별 배포
+- **개발 환경**: develop 브랜치 푸시 시 자동 배포
+- **스테이징 환경**: release 브랜치 생성 시 자동 배포
+- **프로덕션 환경**: main 브랜치 푸시 시 자동 배포
+
+#### 배포 파이프라인
+1. **빌드**: 소스 코드 컴파일 및 패키징
+2. **테스트**: 자동화된 테스트 실행
+3. **배포**: 환경별 자동 배포
+4. **검증**: 배포 후 헬스 체크
+5. **알림**: 배포 상태 알림
+
+### 모니터링 및 알림
+
+#### CI/CD 상태 모니터링
+- GitHub Actions 대시보드
+- 빌드 상태 배지
+- 실시간 알림
+
+#### 릴리스 알림
+- GitHub 릴리스 알림
+- Slack/Teams 통합
+- 이메일 알림
+
+### 문제 해결
+
+#### 일반적인 CI/CD 문제
+1. **빌드 실패**: 로그 확인 및 의존성 검사
+2. **테스트 실패**: 테스트 코드 및 환경 확인
+3. **배포 실패**: 환경 설정 및 권한 확인
+4. **릴리스 실패**: 태그 충돌 및 권한 확인
+
+#### 디버깅 명령어
+```bash
+# CI/CD 로그 확인
+gh run list
+gh run view [run-id]
+
+# 릴리스 상태 확인
+gh release list
+gh release view [tag]
+
+# 워크플로우 상태 확인
+gh workflow list
+gh workflow run [workflow-name]
 ```
 
 #### 자동 버전 증가 및 Git 푸시
@@ -807,6 +968,31 @@ A: `./data/chat-history/` 디렉토리에 JSON 파일로 저장됩니다.
 
 **Q: 서버를 재시작해도 채팅 히스토리가 유지되나요?**
 A: 네, 파일 시스템에 저장되므로 서버 재시작과 관계없이 유지됩니다.
+
+### 캐시 시스템 관련
+
+**Q: 캐시는 어떻게 작동하나요?**
+A: 캐시는 3단계로 작동합니다:
+1. 메모리 캐시에서 먼저 조회 (가장 빠름)
+2. 디스크 캐시에서 조회 (영구 저장)
+3. Redis 캐시에서 조회 (분산 환경)
+
+**Q: 캐시를 비활성화할 수 있나요?**
+A: 네, 환경 변수에서 `CACHE_ENABLED=false`로 설정하면 캐시를 비활성화할 수 있습니다.
+
+**Q: 캐시 크기는 어떻게 조정하나요?**
+A: 환경 변수를 통해 조정할 수 있습니다:
+- `CACHE_MAX_MEMORY_SIZE`: 메모리 캐시 최대 항목 수
+- `CACHE_MAX_DISK_SIZE`: 디스크 캐시 최대 항목 수
+
+**Q: 캐시가 토큰을 얼마나 절약하나요?**
+A: 캐시 히트율에 따라 다르지만, 일반적으로 30-70%의 토큰 절약 효과를 볼 수 있습니다.
+
+**Q: 캐시는 어디에 저장되나요?**
+A: 
+- 메모리 캐시: RAM에 저장
+- 디스크 캐시: `./cache/` 디렉토리에 JSON 파일로 저장
+- Redis 캐시: Redis 서버에 저장 (설정된 경우)
 
 ## 📞 지원
 

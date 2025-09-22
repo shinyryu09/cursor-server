@@ -1,0 +1,222 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Version type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+        - patch
+        - minor
+        - major
+      create_release:
+        description: 'Create GitHub release'
+        required: true
+        default: true
+        type: boolean
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Run tests
+      run: npm test
+      
+    - name: Get version info
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          # Manual release
+          VERSION_TYPE="${{ github.event.inputs.version_type }}"
+          npm run version:$VERSION_TYPE
+          VERSION=$(npm run version:show --silent)
+        else
+          # Tag-based release
+          VERSION=${GITHUB_REF#refs/tags/v}
+        fi
+        
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "version_type=${VERSION_TYPE:-tag}" >> $GITHUB_OUTPUT
+        
+        # Generate version info
+        npm run version:info > version-info.txt
+        echo "version_info<<EOF" >> $GITHUB_OUTPUT
+        cat version-info.txt >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+    - name: Generate changelog
+      run: |
+        npm run changelog:generate
+        
+    - name: Update version history
+      run: |
+        npm run version:history
+        
+    - name: Commit version changes
+      if: github.event_name == 'workflow_dispatch'
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add package.json CHANGELOG.md VERSION_HISTORY.md
+        git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
+        git push origin main
+        
+    - name: Create tag
+      if: github.event_name == 'workflow_dispatch'
+      run: |
+        git tag -a "v${{ steps.version.outputs.version }}" -m "Release version ${{ steps.version.outputs.version }}"
+        git push origin "v${{ steps.version.outputs.version }}"
+        
+    - name: Build release artifacts
+      run: |
+        # Create release directory
+        mkdir -p release
+        
+        # Copy source files
+        cp -r src release/
+        cp -r config release/
+        cp package.json release/
+        cp package-lock.json release/
+        cp README.md release/
+        cp CHANGELOG.md release/
+        cp VERSION_HISTORY.md release/
+        
+        # Create archive
+        tar -czf mcp-cursor-server-v${{ steps.version.outputs.version }}.tar.gz -C release .
+        zip -r mcp-cursor-server-v${{ steps.version.outputs.version }}.zip release/
+        
+        # Generate checksums
+        sha256sum mcp-cursor-server-v${{ steps.version.outputs.version }}.tar.gz > mcp-cursor-server-v${{ steps.version.outputs.version }}.tar.gz.sha256
+        sha256sum mcp-cursor-server-v${{ steps.version.outputs.version }}.zip > mcp-cursor-server-v${{ steps.version.outputs.version }}.zip.sha256
+        
+    - name: Create GitHub Release
+      if: github.event.inputs.create_release != 'false'
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ steps.version.outputs.version }}
+        release_name: Release v${{ steps.version.outputs.version }}
+        body: |
+          ## 🚀 Release v${{ steps.version.outputs.version }}
+          
+          ### 📋 Version Information
+          ```
+          ${{ steps.version.outputs.version_info }}
+          ```
+          
+          ### 📝 Changes
+          
+          See [CHANGELOG.md](./CHANGELOG.md) for detailed changes.
+          
+          ### 📚 Documentation
+          
+          - [README.md](./README.md) - Getting started guide
+          - [VERSION_HISTORY.md](./VERSION_HISTORY.md) - Detailed version history
+          - [CHANGELOG.md](./CHANGELOG.md) - Change log
+          
+          ### 🛠️ Installation
+          
+          ```bash
+          # Clone repository
+          git clone https://github.com/${{ github.repository }}.git
+          cd mcp-cursor-server
+          
+          # Install dependencies
+          npm install
+          
+          # Start server
+          npm start
+          ```
+          
+          ### 🔧 Usage
+          
+          ```bash
+          # Start server
+          npm start
+          
+          # Check status
+          node src/server.js status
+          
+          # Detect projects
+          node src/server.js detect
+          ```
+          
+          ### 📦 Release Artifacts
+          
+          - `mcp-cursor-server-v${{ steps.version.outputs.version }}.tar.gz` - Source archive
+          - `mcp-cursor-server-v${{ steps.version.outputs.version }}.zip` - Source archive (ZIP)
+          - Checksums included for verification
+          
+          ### 🔗 Links
+          
+          - [Repository](https://github.com/${{ github.repository }})
+          - [Issues](https://github.com/${{ github.repository }}/issues)
+          - [Releases](https://github.com/${{ github.repository }}/releases)
+          
+        draft: false
+        prerelease: ${{ contains(steps.version.outputs.version, 'alpha') || contains(steps.version.outputs.version, 'beta') || contains(steps.version.outputs.version, 'rc') }}
+        
+    - name: Upload Release Assets
+      if: github.event.inputs.create_release != 'false'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./mcp-cursor-server-v${{ steps.version.outputs.version }}.tar.gz
+        asset_name: mcp-cursor-server-v${{ steps.version.outputs.version }}.tar.gz
+        asset_content_type: application/gzip
+        
+    - name: Upload Release Assets (ZIP)
+      if: github.event.inputs.create_release != 'false'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./mcp-cursor-server-v${{ steps.version.outputs.version }}.zip
+        asset_name: mcp-cursor-server-v${{ steps.version.outputs.version }}.zip
+        asset_content_type: application/zip
+        
+    - name: Upload Checksums
+      if: github.event.inputs.create_release != 'false'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./mcp-cursor-server-v${{ steps.version.outputs.version }}.tar.gz.sha256
+        asset_name: mcp-cursor-server-v${{ steps.version.outputs.version }}.tar.gz.sha256
+        asset_content_type: text/plain
+        
+    - name: Notify release
+      if: success()
+      run: |
+        echo "🎉 Release v${{ steps.version.outputs.version }} created successfully!"
+        echo "📦 Artifacts:"
+        echo "  - mcp-cursor-server-v${{ steps.version.outputs.version }}.tar.gz"
+        echo "  - mcp-cursor-server-v${{ steps.version.outputs.version }}.zip"
+        echo "  - Checksums included"
+        echo "🔗 Release URL: https://github.com/${{ github.repository }}/releases/tag/v${{ steps.version.outputs.version }}"

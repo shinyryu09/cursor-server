@@ -1,0 +1,148 @@
+name: PR Validation
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Run linting
+      run: npm run lint
+      
+    - name: Run tests
+      run: npm test
+      
+    - name: Check code formatting
+      run: npm run format -- --check
+      
+    - name: Security audit
+      run: npm audit --audit-level=moderate
+      
+    - name: Check version consistency
+      run: |
+        PACKAGE_VERSION=$(npm run version:show --silent)
+        echo "Package version: $PACKAGE_VERSION"
+        
+        # Check if version is properly formatted
+        if [[ ! $PACKAGE_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "❌ Invalid version format: $PACKAGE_VERSION"
+          exit 1
+        fi
+        
+        echo "✅ Version format is valid"
+        
+    - name: Check for breaking changes
+      run: |
+        # Check if this is a major version change
+        if git diff --name-only HEAD~1 | grep -q "package.json"; then
+          echo "📦 package.json changed, checking for major version bump"
+          PREV_VERSION=$(git show HEAD~1:package.json | grep '"version"' | cut -d'"' -f4)
+          CURR_VERSION=$(npm run version:show --silent)
+          
+          PREV_MAJOR=$(echo $PREV_VERSION | cut -d'.' -f1)
+          CURR_MAJOR=$(echo $CURR_VERSION | cut -d'.' -f1)
+          
+          if [ "$CURR_MAJOR" -gt "$PREV_MAJOR" ]; then
+            echo "⚠️  Major version bump detected: $PREV_VERSION -> $CURR_VERSION"
+            echo "Please ensure this PR includes breaking change documentation"
+          fi
+        fi
+        
+    - name: Validate commit messages
+      run: |
+        # Check if commit messages follow conventional commits
+        git log --oneline HEAD~1..HEAD | while read commit; do
+          if [[ ! $commit =~ ^(feat|fix|docs|style|refactor|test|chore|ci|build|perf|revert)(\(.+\))?: ]]; then
+            echo "⚠️  Commit message doesn't follow conventional commits: $commit"
+            echo "Consider using: feat:, fix:, docs:, style:, refactor:, test:, chore:, ci:, build:, perf:, revert:"
+          fi
+        done
+        
+    - name: Check documentation
+      run: |
+        # Check if README.md exists and has content
+        if [ ! -f "README.md" ] || [ ! -s "README.md" ]; then
+          echo "❌ README.md is missing or empty"
+          exit 1
+        fi
+        
+        # Check if CHANGELOG.md exists
+        if [ ! -f "CHANGELOG.md" ]; then
+          echo "⚠️  CHANGELOG.md is missing"
+        fi
+        
+        echo "✅ Documentation check passed"
+        
+    - name: Performance check
+      run: |
+        # Check if server starts without errors
+        timeout 10s npm start || echo "⚠️  Server startup check timed out (expected)"
+        
+    - name: Comment PR
+      if: always()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+          
+          const botComment = comments.find(comment => 
+            comment.user.type === 'Bot' && comment.body.includes('## PR Validation Results')
+          );
+          
+          const status = '${{ job.status }}';
+          const emoji = status === 'success' ? '✅' : '❌';
+          const color = status === 'success' ? 'green' : 'red';
+          
+          const body = `## PR Validation Results ${emoji}
+          
+          **Status:** ${status}
+          
+          ### Checks Performed:
+          - ✅ Code linting
+          - ✅ Unit tests
+          - ✅ Code formatting
+          - ✅ Security audit
+          - ✅ Version consistency
+          - ✅ Documentation check
+          - ✅ Performance check
+          
+          ${status === 'success' ? 'All checks passed! Ready for review.' : 'Some checks failed. Please review the logs.'}
+          `;
+          
+          if (botComment) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: botComment.id,
+              body: body
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+          }

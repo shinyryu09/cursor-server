@@ -17,7 +17,18 @@
     "version:show": "node -p \"require('./package.json').version\"",
     "git:push": "npm run version:patch && git add . && git commit -m \"v$(npm run version:show --silent): $(git log -1 --pretty=%B | head -1)\" && git push origin main",
     "git:push:minor": "npm run version:minor && git add . && git commit -m \"v$(npm run version:show --silent): $(git log -1 --pretty=%B | head -1)\" && git push origin main",
-    "git:push:major": "npm run version:major && git add . && git commit -m \"v$(npm run version:show --silent): $(git log -1 --pretty=%B | head -1)\" && git push origin main"
+    "git:push:major": "npm run version:major && git add . && git commit -m \"v$(npm run version:show --silent): $(git log -1 --pretty=%B | head -1)\" && git push origin main",
+    "changelog:generate": "node scripts/generate-changelog.js",
+    "changelog:update": "echo \"⚠️  CHANGELOG.md와 VERSION_HISTORY.md를 수동으로 업데이트해주세요.\"",
+    "version:info": "node scripts/version-info.js",
+    "version:history": "npm run changelog:generate",
+    "docs:version": "echo \"📝 버전별 수정사항 문서: CHANGELOG.md, VERSION_HISTORY.md\"",
+    "release": "./scripts/release.sh --type patch",
+    "release:minor": "./scripts/release.sh --type minor",
+    "release:major": "./scripts/release.sh --type major",
+    "release:tag": "./scripts/release.sh --type patch --message \"Release with tag\"",
+    "release:tag:minor": "./scripts/release.sh --type minor --message \"Minor release with tag\"",
+    "release:tag:major": "./scripts/release.sh --type major --message \"Major release with tag\""
   },
   "keywords": [
     "mcp",

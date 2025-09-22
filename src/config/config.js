@@ -91,6 +91,50 @@ export const config = {
     timeout: 30000,
     maxRetries: 3,
     workingDirectory: process.env.CURSOR_WORKING_DIR || process.cwd()
+  },
+
+  // 캐시 설정
+  cache: {
+    enabled: process.env.CACHE_ENABLED !== 'false', // 기본값: true
+    maxMemorySize: parseInt(process.env.CACHE_MAX_MEMORY_SIZE) || 100, // 메모리 캐시 최대 항목 수
+    maxDiskSize: parseInt(process.env.CACHE_MAX_DISK_SIZE) || 1000, // 디스크 캐시 최대 항목 수
+    defaultTTL: parseInt(process.env.CACHE_DEFAULT_TTL) || 3600, // 기본 TTL (초)
+    cleanupInterval: parseInt(process.env.CACHE_CLEANUP_INTERVAL) || 300, // 정리 간격 (초)
+    
+    // Redis 캐시 설정 (선택적)
+    redis: {
+      enabled: process.env.CACHE_REDIS_ENABLED === 'true',
+      host: process.env.CACHE_REDIS_HOST || 'localhost',
+      port: parseInt(process.env.CACHE_REDIS_PORT) || 6379,
+      password: process.env.CACHE_REDIS_PASSWORD,
+      db: parseInt(process.env.CACHE_REDIS_DB) || 0,
+      ttl: parseInt(process.env.CACHE_REDIS_TTL) || 3600
+    },
+
+    // 캐시 전략 설정
+    strategy: {
+      // AI 응답 캐시 설정
+      aiResponse: {
+        enabled: process.env.CACHE_AI_RESPONSE !== 'false',
+        ttl: parseInt(process.env.CACHE_AI_RESPONSE_TTL) || 3600,
+        includeContext: process.env.CACHE_INCLUDE_CONTEXT !== 'false'
+      },
+      
+      // 코드 생성 캐시 설정
+      codeGeneration: {
+        enabled: process.env.CACHE_CODE_GENERATION !== 'false',
+        ttl: parseInt(process.env.CACHE_CODE_GENERATION_TTL) || 7200,
+        includeLanguage: true,
+        includeFramework: true
+      },
+      
+      // 코드 리뷰 캐시 설정
+      codeReview: {
+        enabled: process.env.CACHE_CODE_REVIEW !== 'false',
+        ttl: parseInt(process.env.CACHE_CODE_REVIEW_TTL) || 1800,
+        includeCodeHash: true
+      }
+    }
   }
 };
 

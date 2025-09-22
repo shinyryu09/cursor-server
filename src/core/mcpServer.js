@@ -237,6 +237,101 @@ export class MCPServer {
               },
               required: ['filePath', 'analysisType']
             }
+          },
+          {
+            name: 'generate_code',
+            description: 'AI를 사용한 코드 생성',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                prompt: {
+                  type: 'string',
+                  description: '코드 생성 요구사항'
+                },
+                language: {
+                  type: 'string',
+                  description: '프로그래밍 언어'
+                },
+                model: {
+                  type: 'string',
+                  description: '사용할 AI 모델',
+                  enum: ['gpt-4', 'gpt-3.5-turbo', 'claude-3-5-sonnet', 'gemini-pro']
+                },
+                context: {
+                  type: 'object',
+                  description: '추가 컨텍스트 (프로젝트 타입, 프레임워크 등)'
+                }
+              },
+              required: ['prompt', 'language', 'model']
+            }
+          },
+          {
+            name: 'review_code',
+            description: '코드 리뷰 및 개선 제안',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                code: {
+                  type: 'string',
+                  description: '리뷰할 코드'
+                },
+                language: {
+                  type: 'string',
+                  description: '프로그래밍 언어'
+                },
+                model: {
+                  type: 'string',
+                  description: '사용할 AI 모델',
+                  enum: ['gpt-4', 'gpt-3.5-turbo', 'claude-3-5-sonnet', 'gemini-pro']
+                },
+                reviewType: {
+                  type: 'string',
+                  enum: ['general', 'performance', 'security', 'style'],
+                  description: '리뷰 유형'
+                }
+              },
+              required: ['code', 'language', 'model']
+            }
+          },
+          {
+            name: 'cache_stats',
+            description: '캐시 통계 조회',
+            inputSchema: {
+              type: 'object',
+              properties: {}
+            }
+          },
+          {
+            name: 'cache_clear',
+            description: '캐시 전체 삭제',
+            inputSchema: {
+              type: 'object',
+              properties: {}
+            }
+          },
+          {
+            name: 'cache_cleanup',
+            description: '만료된 캐시 정리',
+            inputSchema: {
+              type: 'object',
+              properties: {}
+            }
+          },
+          {
+            name: 'cache_maintenance',
+            description: '수동 캐시 유지보수 실행',
+            inputSchema: {
+              type: 'object',
+              properties: {}
+            }
+          },
+          {
+            name: 'cache_maintenance_status',
+            description: '캐시 유지보수 서비스 상태 조회',
+            inputSchema: {
+              type: 'object',
+              properties: {}
+            }
           }
         ]
       };
@@ -289,6 +384,93 @@ export class MCPServer {
                 {
                   type: 'text',
                   text: analysisResult
+                }
+              ]
+            };
+
+          case 'generate_code':
+            const codeResult = await this.aiService.generateCode(
+              args.prompt, 
+              args.language, 
+              args.model, 
+              args.context || {}
+            );
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: codeResult
+                }
+              ]
+            };
+
+          case 'review_code':
+            const reviewResult = await this.aiService.reviewCode(
+              args.code, 
+              args.language, 
+              args.model, 
+              args.reviewType || 'general'
+            );
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: reviewResult
+                }
+              ]
+            };
+
+          case 'cache_stats':
+            const cacheStats = this.aiService.getCacheStats();
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `캐시 통계:\n${JSON.stringify(cacheStats, null, 2)}`
+                }
+              ]
+            };
+
+          case 'cache_clear':
+            await this.aiService.clearCache();
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: '캐시가 성공적으로 삭제되었습니다.'
+                }
+              ]
+            };
+
+          case 'cache_cleanup':
+            const cleanedCount = await this.aiService.cleanupExpiredCache();
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `만료된 캐시 ${cleanedCount}개가 정리되었습니다.`
+                }
+              ]
+            };
+
+          case 'cache_maintenance':
+            await this.aiService.runCacheMaintenance();
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: '캐시 유지보수가 성공적으로 실행되었습니다.'
+                }
+              ]
+            };
+
+          case 'cache_maintenance_status':
+            const maintenanceStatus = this.aiService.getCacheMaintenanceStatus();
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `캐시 유지보수 서비스 상태:\n${JSON.stringify(maintenanceStatus, null, 2)}`
                 }
               ]
             };
@@ -477,6 +659,9 @@ export class MCPServer {
    */
   async stop() {
     try {
+      // 캐시 유지보수 서비스 중지
+      this.aiService.stopCacheMaintenance();
+      
       await this.server.close();
       logger.info('MCP 서버가 중지되었습니다');
     } catch (error) {
