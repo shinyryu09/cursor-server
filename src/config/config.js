@@ -66,6 +66,17 @@ export const config = {
         process.env.HOME + '/Development',
         process.env.HOME + '/AndroidStudioProjects'
       ]
+    },
+    flutter: {
+      extensions: ['pubspec.yaml', 'analysis_options.yaml'],
+      searchPaths: [
+        process.env.HOME + '/Documents',
+        process.env.HOME + '/Desktop',
+        process.env.HOME + '/Projects',
+        process.env.HOME + '/Development',
+        process.env.HOME + '/FlutterProjects',
+        process.env.HOME + '/AndroidStudioProjects'
+      ]
     }
   },
 

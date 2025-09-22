@@ -22,7 +22,10 @@
     "git:push:major": "npm run version:major && git add . && git commit -m \"v$(npm run version:show --silent): $(git log -1 --pretty=%B | head -1)\" && git push origin main",
     "release": "npm run version:changelog && npm run git:push",
     "release:minor": "npm run version:changelog && npm run git:push:minor",
-    "release:major": "npm run version:changelog && npm run git:push:major"
+    "release:major": "npm run version:changelog && npm run git:push:major",
+    "release:tag": "./scripts/release.sh",
+    "release:tag:minor": "./scripts/release.sh",
+    "release:tag:major": "./scripts/release.sh"
   },
   "keywords": [
     "mcp",

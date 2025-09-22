@@ -5,6 +5,7 @@ import config from '../config/config.js';
 import ProjectDetector from '../services/projectDetector.js';
 import CursorEditorService from '../services/cursorEditorService.js';
 import AIService from '../services/aiService.js';
+import ChatHistoryService from '../services/chatHistoryService.js';
 
 /**
  * HTTP MCP 서버
@@ -15,6 +16,7 @@ export class HttpMCPServer {
     this.projectDetector = new ProjectDetector();
     this.cursorEditorService = new CursorEditorService();
     this.aiService = new AIService();
+    this.chatHistoryService = new ChatHistoryService();
     
     this.setupMiddleware();
     this.setupRoutes();
@@ -492,6 +494,9 @@ export class HttpMCPServer {
       }
     });
 
+    // 채팅 히스토리 API 엔드포인트
+    this.setupChatHistoryRoutes();
+
     // 404 핸들러
     this.app.use('*', (req, res) => {
       res.status(404).json({
@@ -499,6 +504,203 @@ export class HttpMCPServer {
         path: req.originalUrl,
         method: req.method
       });
+    });
+  }
+
+  /**
+   * 채팅 히스토리 라우트 설정
+   */
+  setupChatHistoryRoutes() {
+    // 새 세션 생성
+    this.app.post('/api/chat/sessions', async (req, res) => {
+      try {
+        const sessionId = this.chatHistoryService.generateSessionId();
+        res.json({
+          sessionId,
+          message: '새 채팅 세션이 생성되었습니다.',
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        logger.error('세션 생성 실패:', error);
+        res.status(500).json({
+          error: '세션 생성 실패',
+          message: error.message
+        });
+      }
+    });
+
+    // 채팅 메시지 저장
+    this.app.post('/api/chat/sessions/:sessionId/messages', async (req, res) => {
+      try {
+        const { sessionId } = req.params;
+        const { message, response, metadata } = req.body;
+
+        if (!message || !response) {
+          return res.status(400).json({
+            error: 'Bad Request',
+            message: 'message와 response는 필수입니다.'
+          });
+        }
+
+        const messageId = await this.chatHistoryService.saveMessage(
+          sessionId,
+          message,
+          response,
+          metadata
+        );
+
+        res.json({
+          messageId,
+          sessionId,
+          message: '채팅 메시지가 저장되었습니다.',
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        logger.error('메시지 저장 실패:', error);
+        res.status(500).json({
+          error: '메시지 저장 실패',
+          message: error.message
+        });
+      }
+    });
+
+    // 세션 히스토리 조회
+    this.app.get('/api/chat/sessions/:sessionId', async (req, res) => {
+      try {
+        const { sessionId } = req.params;
+        const { limit = 50 } = req.query;
+
+        const history = await this.chatHistoryService.getSessionHistory(
+          sessionId,
+          parseInt(limit)
+        );
+
+        if (!history) {
+          return res.status(404).json({
+            error: 'Not Found',
+            message: '세션을 찾을 수 없습니다.'
+          });
+        }
+
+        res.json(history);
+      } catch (error) {
+        logger.error('히스토리 조회 실패:', error);
+        res.status(500).json({
+          error: '히스토리 조회 실패',
+          message: error.message
+        });
+      }
+    });
+
+    // 모든 세션 목록 조회
+    this.app.get('/api/chat/sessions', async (req, res) => {
+      try {
+        const sessions = await this.chatHistoryService.getAllSessions();
+        res.json({
+          sessions,
+          count: sessions.length,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        logger.error('세션 목록 조회 실패:', error);
+        res.status(500).json({
+          error: '세션 목록 조회 실패',
+          message: error.message
+        });
+      }
+    });
+
+    // 세션 삭제
+    this.app.delete('/api/chat/sessions/:sessionId', async (req, res) => {
+      try {
+        const { sessionId } = req.params;
+        const deleted = await this.chatHistoryService.deleteSession(sessionId);
+
+        if (!deleted) {
+          return res.status(404).json({
+            error: 'Not Found',
+            message: '세션을 찾을 수 없습니다.'
+          });
+        }
+
+        res.json({
+          message: '세션이 삭제되었습니다.',
+          sessionId,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        logger.error('세션 삭제 실패:', error);
+        res.status(500).json({
+          error: '세션 삭제 실패',
+          message: error.message
+        });
+      }
+    });
+
+    // 히스토리 검색
+    this.app.get('/api/chat/search', async (req, res) => {
+      try {
+        const { q: keyword, limit = 20 } = req.query;
+
+        if (!keyword) {
+          return res.status(400).json({
+            error: 'Bad Request',
+            message: '검색 키워드(q)는 필수입니다.'
+          });
+        }
+
+        const results = await this.chatHistoryService.searchHistory(
+          keyword,
+          parseInt(limit)
+        );
+
+        res.json({
+          keyword,
+          results,
+          count: results.length,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        logger.error('히스토리 검색 실패:', error);
+        res.status(500).json({
+          error: '히스토리 검색 실패',
+          message: error.message
+        });
+      }
+    });
+
+    // 히스토리 통계
+    this.app.get('/api/chat/stats', async (req, res) => {
+      try {
+        const stats = await this.chatHistoryService.getStatistics();
+        res.json({
+          ...stats,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        logger.error('통계 조회 실패:', error);
+        res.status(500).json({
+          error: '통계 조회 실패',
+          message: error.message
+        });
+      }
+    });
+
+    // 오래된 세션 정리
+    this.app.post('/api/chat/cleanup', async (req, res) => {
+      try {
+        const result = await this.chatHistoryService.cleanupOldSessions();
+        res.json({
+          ...result,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        logger.error('세션 정리 실패:', error);
+        res.status(500).json({
+          error: '세션 정리 실패',
+          message: error.message
+        });
+      }
     });
   }
 
@@ -529,6 +731,7 @@ export class HttpMCPServer {
     try {
       // 서비스 초기화
       await this.cursorEditorService.initialize();
+      await this.chatHistoryService.initialize();
       logger.info('HTTP MCP 서버 서비스 초기화 완료');
       
       this.server = this.app.listen(config.server.port, config.server.host, () => {

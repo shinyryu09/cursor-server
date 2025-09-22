@@ -93,6 +93,19 @@ class Application {
       .action(async (options) => {
         await this.handleVersion(options);
       });
+
+    // 채팅 히스토리 관리 명령어
+    this.program
+      .command('chat')
+      .description('Chat history management commands')
+      .option('-l, --list', 'List all chat sessions')
+      .option('-s, --stats', 'Show chat statistics')
+      .option('-c, --cleanup', 'Clean up old chat sessions')
+      .option('-d, --delete <sessionId>', 'Delete specific chat session')
+      .option('--search <keyword>', 'Search chat history')
+      .action(async (options) => {
+        await this.handleChatHistory(options);
+      });
   }
 
   /**
@@ -217,17 +230,17 @@ class Application {
         }
       }
 
-      // Cursor 서비스 상태
-      console.log(chalk.cyan('\nCursor 서비스 상태:'));
-      const CursorService = (await import('./services/cursorService.js')).default;
-      const cursorService = new CursorService();
-      const cursorStatus = await cursorService.getStatus();
+      // Cursor Editor 서비스 상태
+      console.log(chalk.cyan('\nCursor Editor 서비스 상태:'));
+      const CursorEditorService = (await import('./services/cursorEditorService.js')).default;
+      const cursorEditorService = new CursorEditorService();
+      const cursorEditorStatus = cursorEditorService.getStatus();
 
-      const cursorIcon = cursorStatus.available ? '✅' : '❌';
-      console.log(chalk.gray(`  ${cursorIcon} Cursor CLI: ${cursorStatus.available ? '사용 가능' : '사용 불가'}`));
-      if (cursorStatus.available) {
-        console.log(chalk.gray(`    작업 디렉토리: ${cursorStatus.workingDirectory}`));
-        console.log(chalk.gray(`    타임아웃: ${cursorStatus.timeout}ms`));
+      const cursorIcon = cursorEditorStatus.available ? '✅' : '❌';
+      console.log(chalk.gray(`  ${cursorIcon} Cursor Editor: ${cursorEditorStatus.available ? '사용 가능' : '사용 불가'}`));
+      if (cursorEditorStatus.available) {
+        console.log(chalk.gray(`    Base URL: ${cursorEditorStatus.baseUrl}`));
+        console.log(chalk.gray(`    타임아웃: ${cursorEditorStatus.timeout}ms`));
       }
 
       // 프로젝트 상태
@@ -431,6 +444,179 @@ class Application {
       
     } catch (error) {
       throw new Error(`버전 증가 실패: ${error.message}`);
+    }
+  }
+
+  /**
+   * 채팅 히스토리 핸들러
+   */
+  async handleChatHistory(options) {
+    try {
+      const ChatHistoryService = (await import('./services/chatHistoryService.js')).default;
+      const chatHistoryService = new ChatHistoryService();
+      await chatHistoryService.initialize();
+
+      if (options.list) {
+        await this.listChatSessions(chatHistoryService);
+      } else if (options.stats) {
+        await this.showChatStatistics(chatHistoryService);
+      } else if (options.cleanup) {
+        await this.cleanupChatSessions(chatHistoryService);
+      } else if (options.delete) {
+        await this.deleteChatSession(chatHistoryService, options.delete);
+      } else if (options.search) {
+        await this.searchChatHistory(chatHistoryService, options.search);
+      } else {
+        // 기본적으로 통계 표시
+        await this.showChatStatistics(chatHistoryService);
+      }
+    } catch (error) {
+      console.error(chalk.red.bold('❌ 채팅 히스토리 관리 실패:'), error.message);
+      logger.error('채팅 히스토리 관리 실패:', error);
+      process.exit(1);
+    }
+  }
+
+  /**
+   * 채팅 세션 목록 표시
+   */
+  async listChatSessions(chatHistoryService) {
+    try {
+      const sessions = await chatHistoryService.getAllSessions();
+      
+      console.log(chalk.blue.bold('💬 채팅 세션 목록'));
+      console.log(chalk.gray('=' .repeat(80)));
+      
+      if (sessions.length === 0) {
+        console.log(chalk.yellow('📝 채팅 세션이 없습니다.'));
+        return;
+      }
+      
+      sessions.forEach((session, index) => {
+        const createdDate = new Date(session.createdAt).toLocaleString();
+        const updatedDate = new Date(session.updatedAt).toLocaleString();
+        
+        console.log(chalk.cyan(`${index + 1}. ${session.sessionId}`));
+        console.log(chalk.gray(`   생성: ${createdDate}`));
+        console.log(chalk.gray(`   수정: ${updatedDate}`));
+        console.log(chalk.gray(`   메시지: ${session.messageCount}개`));
+        console.log(chalk.gray(`   마지막 메시지: ${session.lastMessage.substring(0, 50)}...`));
+        console.log('');
+      });
+      
+      console.log(chalk.gray(`총 ${sessions.length}개 세션`));
+      
+    } catch (error) {
+      throw new Error(`세션 목록 표시 실패: ${error.message}`);
+    }
+  }
+
+  /**
+   * 채팅 통계 표시
+   */
+  async showChatStatistics(chatHistoryService) {
+    try {
+      const stats = await chatHistoryService.getStatistics();
+      
+      console.log(chalk.blue.bold('📊 채팅 히스토리 통계'));
+      console.log(chalk.gray('=' .repeat(50)));
+      
+      console.log(chalk.cyan('세션 정보:'));
+      console.log(chalk.gray(`  총 세션 수: ${stats.totalSessions}개`));
+      console.log(chalk.gray(`  총 메시지 수: ${stats.totalMessages}개`));
+      console.log(chalk.gray(`  세션당 평균 메시지: ${stats.averageMessagesPerSession}개`));
+      
+      if (stats.oldestSession) {
+        console.log(chalk.gray(`  가장 오래된 세션: ${new Date(stats.oldestSession).toLocaleString()}`));
+      }
+      if (stats.newestSession) {
+        console.log(chalk.gray(`  가장 최근 세션: ${new Date(stats.newestSession).toLocaleString()}`));
+      }
+      
+      console.log(chalk.cyan('\n저장소 사용량:'));
+      console.log(chalk.gray(`  ${stats.storageUsed.mb}MB (${stats.storageUsed.kb}KB, ${stats.storageUsed.bytes} bytes)`));
+      
+      console.log(chalk.gray('\n' + '=' .repeat(50)));
+      console.log(chalk.blue.bold('💡 채팅 히스토리 명령어:'));
+      console.log(chalk.gray('  node src/server.js chat --list           - 세션 목록 표시'));
+      console.log(chalk.gray('  node src/server.js chat --stats          - 통계 표시'));
+      console.log(chalk.gray('  node src/server.js chat --cleanup        - 오래된 세션 정리'));
+      console.log(chalk.gray('  node src/server.js chat --delete <id>    - 세션 삭제'));
+      console.log(chalk.gray('  node src/server.js chat --search <키워드> - 히스토리 검색'));
+      
+    } catch (error) {
+      throw new Error(`통계 표시 실패: ${error.message}`);
+    }
+  }
+
+  /**
+   * 오래된 채팅 세션 정리
+   */
+  async cleanupChatSessions(chatHistoryService) {
+    try {
+      console.log(chalk.blue('🧹 오래된 채팅 세션을 정리하는 중...'));
+      
+      const result = await chatHistoryService.cleanupOldSessions();
+      
+      console.log(chalk.green.bold('✅ 세션 정리 완료!'));
+      console.log(chalk.gray(`결과: ${result.message}`));
+      
+    } catch (error) {
+      throw new Error(`세션 정리 실패: ${error.message}`);
+    }
+  }
+
+  /**
+   * 채팅 세션 삭제
+   */
+  async deleteChatSession(chatHistoryService, sessionId) {
+    try {
+      console.log(chalk.blue(`🗑️  세션 삭제 중: ${sessionId}`));
+      
+      const deleted = await chatHistoryService.deleteSession(sessionId);
+      
+      if (deleted) {
+        console.log(chalk.green.bold('✅ 세션이 삭제되었습니다!'));
+      } else {
+        console.log(chalk.yellow('⚠️  세션을 찾을 수 없습니다.'));
+      }
+      
+    } catch (error) {
+      throw new Error(`세션 삭제 실패: ${error.message}`);
+    }
+  }
+
+  /**
+   * 채팅 히스토리 검색
+   */
+  async searchChatHistory(chatHistoryService, keyword) {
+    try {
+      console.log(chalk.blue(`🔍 채팅 히스토리 검색: "${keyword}"`));
+      
+      const results = await chatHistoryService.searchHistory(keyword);
+      
+      if (results.length === 0) {
+        console.log(chalk.yellow('📝 검색 결과가 없습니다.'));
+        return;
+      }
+      
+      console.log(chalk.gray('=' .repeat(80)));
+      
+      results.forEach((result, index) => {
+        console.log(chalk.cyan(`${index + 1}. 세션: ${result.sessionId}`));
+        console.log(chalk.gray(`   수정: ${new Date(result.updatedAt).toLocaleString()}`));
+        console.log(chalk.gray(`   매칭 메시지: ${result.matches.length}개`));
+        
+        result.matches.forEach((match, matchIndex) => {
+          console.log(chalk.gray(`   ${matchIndex + 1}) ${match.message.content.substring(0, 100)}...`));
+        });
+        console.log('');
+      });
+      
+      console.log(chalk.gray(`총 ${results.length}개 세션에서 검색됨`));
+      
+    } catch (error) {
+      throw new Error(`히스토리 검색 실패: ${error.message}`);
     }
   }
 

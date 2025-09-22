@@ -32,6 +32,14 @@ export class ProjectDetector {
         return xcodeProject;
       }
 
+      // Flutter 프로젝트 감지
+      const flutterProject = await this.detectFlutterProject(workingDir);
+      if (flutterProject) {
+        this.currentProject = flutterProject;
+        logger.info(`Flutter 프로젝트 감지됨: ${flutterProject.name} (${flutterProject.path})`);
+        return flutterProject;
+      }
+
       // Android 프로젝트 감지
       const androidProject = await this.detectAndroidProject(workingDir);
       if (androidProject) {
@@ -108,6 +116,53 @@ export class ProjectDetector {
   }
 
   /**
+   * Flutter 프로젝트 감지
+   */
+  async detectFlutterProject(workingDir) {
+    try {
+      // 현재 디렉토리에서 Flutter 프로젝트 파일 찾기
+      const hasFlutterFiles = await this.hasFlutterFiles(workingDir);
+      
+      if (hasFlutterFiles) {
+        const projectInfo = await this.getFlutterProjectInfo(workingDir);
+        
+        return {
+          type: PROJECT_TYPES.FLUTTER,
+          name: path.basename(workingDir),
+          path: workingDir,
+          ...projectInfo
+        };
+      }
+
+      // 하위 디렉토리에서 검색
+      for (const searchPath of config.projects.flutter.searchPaths) {
+        try {
+          const projects = await this.findFlutterProjects(searchPath);
+          if (projects.length > 0) {
+            const latestProject = projects.sort((a, b) => 
+              new Date(b.lastModified) - new Date(a.lastModified)
+            )[0];
+            
+            return {
+              type: PROJECT_TYPES.FLUTTER,
+              name: latestProject.name,
+              path: latestProject.path,
+              ...latestProject
+            };
+          }
+        } catch (error) {
+          logger.debug(`검색 경로에서 오류: ${searchPath}`, error.message);
+        }
+      }
+
+      return null;
+    } catch (error) {
+      logger.error('Flutter 프로젝트 감지 중 오류:', error);
+      return null;
+    }
+  }
+
+  /**
    * Android 프로젝트 감지
    */
   async detectAndroidProject(workingDir) {
@@ -155,6 +210,22 @@ export class ProjectDetector {
   }
 
   /**
+   * Flutter 프로젝트 파일 존재 확인
+   */
+  async hasFlutterFiles(dir) {
+    try {
+      const files = await fs.readdir(dir);
+      const hasPubspec = files.includes('pubspec.yaml');
+      const hasLib = files.includes('lib');
+      
+      // pubspec.yaml과 lib 디렉토리가 모두 있어야 Flutter 프로젝트로 인식
+      return hasPubspec && hasLib;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Android 프로젝트 파일 존재 확인
    */
   async hasAndroidFiles(dir) {
@@ -197,6 +268,40 @@ export class ProjectDetector {
         projectDir: path.dirname(projectFile),
         targetName: 'Unknown',
         bundleId: 'Unknown'
+      };
+    }
+  }
+
+  /**
+   * Flutter 프로젝트 정보 수집
+   */
+  async getFlutterProjectInfo(projectDir) {
+    try {
+      // pubspec.yaml 파일 읽기
+      const pubspecPath = path.join(projectDir, 'pubspec.yaml');
+      let pubspecContent = '';
+      
+      try {
+        pubspecContent = await fs.readFile(pubspecPath, 'utf8');
+      } catch {
+        logger.debug('pubspec.yaml 파일을 찾을 수 없음');
+      }
+
+      // 프로젝트 정보 파싱
+      const projectInfo = this.parseFlutterProject(pubspecContent);
+      
+      return {
+        ...projectInfo,
+        pubspecPath: pubspecContent ? pubspecPath : null
+      };
+    } catch (error) {
+      logger.debug('Flutter 프로젝트 정보 수집 실패:', error.message);
+      return {
+        name: 'Unknown',
+        version: 'Unknown',
+        description: 'Unknown',
+        flutterVersion: 'Unknown',
+        dependencies: []
       };
     }
   }
@@ -256,6 +361,90 @@ export class ProjectDetector {
     }
     
     return settings;
+  }
+
+  /**
+   * Flutter 프로젝트 정보 파싱
+   */
+  parseFlutterProject(pubspecContent) {
+    const info = {
+      name: 'Unknown',
+      version: 'Unknown',
+      description: 'Unknown',
+      flutterVersion: 'Unknown',
+      dependencies: []
+    };
+
+    if (!pubspecContent) return info;
+
+    const lines = pubspecContent.split('\n');
+    let inDependencies = false;
+
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      
+      // 프로젝트명 추출
+      if (trimmedLine.startsWith('name:')) {
+        const nameMatch = trimmedLine.match(/name:\s*(.+)/);
+        if (nameMatch) {
+          info.name = nameMatch[1].trim();
+        }
+      }
+      
+      // 버전 추출
+      if (trimmedLine.startsWith('version:')) {
+        const versionMatch = trimmedLine.match(/version:\s*(.+)/);
+        if (versionMatch) {
+          info.version = versionMatch[1].trim();
+        }
+      }
+      
+      // 설명 추출
+      if (trimmedLine.startsWith('description:')) {
+        const descMatch = trimmedLine.match(/description:\s*(.+)/);
+        if (descMatch) {
+          info.description = descMatch[1].trim();
+        }
+      }
+      
+      // Flutter 버전 추출
+      if (trimmedLine.startsWith('flutter:')) {
+        inDependencies = false;
+      }
+      
+      if (trimmedLine.startsWith('environment:')) {
+        inDependencies = false;
+      }
+      
+      if (trimmedLine.startsWith('sdk:')) {
+        const sdkMatch = trimmedLine.match(/sdk:\s*(.+)/);
+        if (sdkMatch) {
+          info.flutterVersion = sdkMatch[1].trim();
+        }
+      }
+      
+      // 의존성 추출
+      if (trimmedLine === 'dependencies:') {
+        inDependencies = true;
+        continue;
+      }
+      
+      if (inDependencies && trimmedLine && !trimmedLine.startsWith(' ') && !trimmedLine.startsWith('\t')) {
+        inDependencies = false;
+      }
+      
+      if (inDependencies && trimmedLine && (trimmedLine.startsWith(' ') || trimmedLine.startsWith('\t'))) {
+        const depMatch = trimmedLine.match(/^\s*([^:]+):\s*(.+)/);
+        if (depMatch) {
+          info.dependencies.push({
+            name: depMatch[1].trim(),
+            version: depMatch[2].trim()
+          });
+        }
+      }
+    }
+
+    return info;
   }
 
   /**
@@ -327,6 +516,41 @@ export class ProjectDetector {
             projectFile: projectPath,
             lastModified: stats.mtime
           });
+        }
+      }
+    } catch (error) {
+      // 권한 오류 등은 무시
+    }
+    
+    return projects;
+  }
+
+  /**
+   * Flutter 프로젝트 검색
+   */
+  async findFlutterProjects(searchPath) {
+    const projects = [];
+    
+    try {
+      const entries = await fs.readdir(searchPath, { withFileTypes: true });
+      
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          const subPath = path.join(searchPath, entry.name);
+          const hasFlutterFiles = await this.hasFlutterFiles(subPath);
+          
+          if (hasFlutterFiles) {
+            const stats = await fs.stat(subPath);
+            projects.push({
+              name: entry.name,
+              path: subPath,
+              lastModified: stats.mtime
+            });
+          }
+          
+          // 하위 디렉토리도 검색
+          const subProjects = await this.findFlutterProjects(subPath);
+          projects.push(...subProjects);
         }
       }
     } catch (error) {

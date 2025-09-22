@@ -105,6 +105,7 @@ export class MCPError extends Error {
 export const PROJECT_TYPES = {
   XCODE: 'xcode',
   ANDROID: 'android',
+  FLUTTER: 'flutter',
   UNKNOWN: 'unknown'
 };
 
