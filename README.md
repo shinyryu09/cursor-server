@@ -543,6 +543,18 @@ npm run version:minor
 npm run version:major
 ```
 
+#### 자동 버전 증가 및 Git 푸시
+```bash
+# 패치 버전 증가 후 자동 푸시
+npm run git:push
+
+# 마이너 버전 증가 후 자동 푸시
+npm run git:push:minor
+
+# 메이저 버전 증가 후 자동 푸시
+npm run git:push:major
+```
+
 ## 💬 채팅 히스토리
 
 ### 기능 개요

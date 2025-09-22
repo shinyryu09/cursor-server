@@ -523,6 +523,11 @@ class Application {
       console.log(chalk.gray('  npm run version:patch                 - 패치 버전 증가'));
       console.log(chalk.gray('  npm run version:minor                 - 마이너 버전 증가'));
       console.log(chalk.gray('  npm run version:major                 - 메이저 버전 증가'));
+      console.log(chalk.gray(''));
+      console.log(chalk.blue.bold('🚀 자동 버전 증가 및 푸시:'));
+      console.log(chalk.gray('  npm run git:push                      - 패치 버전 증가 후 자동 푸시'));
+      console.log(chalk.gray('  npm run git:push:minor                - 마이너 버전 증가 후 자동 푸시'));
+      console.log(chalk.gray('  npm run git:push:major                - 메이저 버전 증가 후 자동 푸시'));
       
     } catch (error) {
       throw new Error(`버전 정보 표시 실패: ${error.message}`);
