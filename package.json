@@ -1,6 +1,6 @@
 {
   "name": "cursor-server",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Node.js server for Xcode Code Intelligence integration with Cursor CLI",
   "main": "server.js",
   "scripts": {
@@ -9,7 +9,12 @@
     "test": "echo \"No tests specified\" && exit 0",
     "lint": "echo \"No linting configured\" && exit 0",
     "format:check": "echo \"No formatting configured\" && exit 0",
-    "build": "echo \"No build process needed\" && exit 0"
+    "build": "echo \"No build process needed\" && exit 0",
+    "version:patch": "npm version patch --no-git-tag-version",
+    "version:minor": "npm version minor --no-git-tag-version",
+    "version:major": "npm version major --no-git-tag-version",
+    "version:show": "node -p \"require('./package.json').version\"",
+    "git:push": "npm run version:patch && git add . && git commit -m \"v$(npm run version:show --silent): $(git log -1 --pretty=%B | head -1)\" && git push origin main"
   },
   "keywords": [
     "cursor",

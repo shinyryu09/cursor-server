@@ -1,6 +1,6 @@
-# Cursor Server - Xcode Code Intelligence Integration
+# Cursor Server - OpenAI-Compatible API Server
 
-Node.js 기반 서버로 Xcode Code Intelligence와 Cursor CLI를 연결하여 AI 기반 코드 분석, 수정, 생성 기능을 제공합니다.
+[Apple On-Device OpenAI](https://github.com/gety-ai/apple-on-device-openai) 스타일의 OpenAI 호환 API 서버로 Xcode Code Intelligence, IntelliJ IDEA, VSCode와 Cursor CLI/Editor를 연결하여 AI 기반 코드 분석, 수정, 생성 기능을 제공합니다.
 
 ## 📁 프로젝트 구조
 
@@ -19,24 +19,37 @@ cursor-server/
 └── README.md                  # 프로젝트 문서
 ```
 
-## 🚀 주요 기능
+## ✨ 주요 기능
 
-### 1. Xcode Code Intelligence 통합
-- **모델 목록 제공**: `/v1/models` - Xcode에서 인식할 수 있는 AI 모델 목록
-- **코드 완성**: `/v1/completions` - 실시간 코드 완성 기능
-- **채팅 완성**: `/v1/chat/completions` - AI와의 대화형 코드 생성
+### 1. OpenAI API 호환성
+- **표준 OpenAI API**: `/v1/chat/completions`, `/v1/models` 등 완전 호환
+- **스트리밍 지원**: 실시간 응답 스트리밍 (Server-Sent Events)
+- **모델 정보**: 상세한 모델 능력 및 상태 정보 제공
 
-### 2. Cursor CLI 통합
+### 2. 개발 도구 통합
+- **Xcode Code Intelligence**: 완전 지원
+- **IntelliJ IDEA**: 프로젝트 경로 자동 감지
+- **VSCode**: 워크스페이스 자동 감지
+- **Cursor Editor**: 직접 연결 지원
+
+### 3. Cursor CLI/Editor 통합
 - **인증 관리**: Cursor CLI 로그인 상태 자동 확인
 - **명령 실행**: 복잡한 프롬프트를 안전하게 처리
 - **파일 수정**: 실제 파일 읽기, 분석, 수정 기능
+- **실시간 연결**: Cursor Editor와 직접 통신
 
-### 3. 작업 추적 시스템
+### 4. Apple On-Device OpenAI 스타일
+- **헬스 체크**: 상세한 서버 및 모델 상태 정보
+- **에러 처리**: 표준화된 에러 응답 형식
+- **CORS 설정**: 개발 도구별 최적화된 CORS 정책
+- **로깅 시스템**: 구조화된 요청/응답 로깅
+
+### 5. 작업 추적 시스템
 - **실시간 진행 상황**: 현재 진행 중인 작업 모니터링
 - **작업 이력**: 완료된 작업들의 상세 기록
 - **코드 변경 이력**: 파일 수정 사항과 diff 추적
 
-### 4. 웹 대시보드
+### 6. 웹 대시보드
 - **실시간 모니터링**: `http://localhost:3000/dashboard`
 - **작업 상태 시각화**: 진행률, 단계별 상태 표시
 - **코드 변경 내역**: 파일별 수정 사항과 차이점 표시
@@ -101,7 +114,14 @@ node server.js &
 
 ### 4. 서버 상태 확인
 ```bash
+# 헬스 체크 (Apple On-Device OpenAI 스타일)
 curl http://localhost:3000/health
+
+# 모델 상태 확인
+curl http://localhost:3000/status
+
+# 모델 목록 조회
+curl http://localhost:3000/v1/models
 ```
 
 ### 5. VSCode에서 실행
@@ -158,15 +178,16 @@ curl http://localhost:3000/workspace
 
 ## 📡 API 엔드포인트
 
+### OpenAI 호환 API
+- `GET /health` - 서버 상태 확인 (Apple On-Device OpenAI 스타일)
+- `GET /status` - 모델 상태 확인
+- `GET /v1/models` - OpenAI 호환 모델 목록
+- `POST /v1/chat/completions` - 채팅 완성 (스트리밍 지원)
+- `POST /v1/completions` - 코드 완성 (SSE 스트리밍)
+
 ### 기본 엔드포인트
-- `GET /health` - 서버 상태 확인
 - `GET /workspace` - 현재 작업 디렉토리 조회
 - `POST /set-workspace` - 작업 디렉토리 설정
-
-### Xcode Code Intelligence API
-- `GET /v1/models` - 모델 목록
-- `POST /v1/completions` - 코드 완성
-- `POST /v1/chat/completions` - 채팅 완성
 
 ### 작업 관리 API
 - `GET /tasks/current` - 현재 진행 중인 작업
@@ -180,6 +201,71 @@ curl http://localhost:3000/workspace
 - `POST /write-file` - 파일 쓰기
 - `POST /diff-files` - 파일 비교
 - `POST /merge-files` - 파일 병합
+
+## 💡 사용 예제
+
+### OpenAI Python 클라이언트 사용
+```python
+from openai import OpenAI
+
+# 로컬 서버에 연결
+client = OpenAI(
+    base_url="http://localhost:3000/v1",
+    api_key="not-needed"  # API 키 불필요
+)
+
+# 채팅 완성
+response = client.chat.completions.create(
+    model="cursor-cli",
+    messages=[
+        {"role": "user", "content": "Swift에서 MVVM 패턴을 구현하는 방법을 알려주세요."}
+    ],
+    temperature=0.7
+)
+
+print(response.choices[0].message.content)
+```
+
+### 스트리밍 응답 사용
+```python
+# 스트리밍 응답
+response = client.chat.completions.create(
+    model="cursor-cli",
+    messages=[
+        {"role": "user", "content": "iOS 앱 개발 가이드를 작성해주세요."}
+    ],
+    stream=True
+)
+
+for chunk in response:
+    if chunk.choices[0].delta.content:
+        print(chunk.choices[0].delta.content, end="")
+```
+
+### cURL을 사용한 직접 호출
+```bash
+# 일반 채팅
+curl -X POST http://localhost:3000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "cursor-cli",
+    "messages": [
+      {"role": "user", "content": "안녕하세요!"}
+    ],
+    "temperature": 0.7
+  }'
+
+# 스트리밍 채팅
+curl -X POST http://localhost:3000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "cursor-cli",
+    "messages": [
+      {"role": "user", "content": "코드를 설명해주세요."}
+    ],
+    "stream": true
+  }' --no-buffer
+```
 
 ## 🔧 설정 및 커스터마이징
 
