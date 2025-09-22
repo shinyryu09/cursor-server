@@ -14,18 +14,7 @@
     "version:patch": "npm version patch --no-git-tag-version",
     "version:minor": "npm version minor --no-git-tag-version",
     "version:major": "npm version major --no-git-tag-version",
-    "version:show": "node -p \"require('./package.json').version\"",
-    "version:info": "node scripts/version-info.js",
-    "version:changelog": "node scripts/generate-changelog.js",
-    "git:push": "npm run version:patch && git add . && git commit -m \"v$(npm run version:show --silent): $(git log -1 --pretty=%B | head -1)\" && git push origin main",
-    "git:push:minor": "npm run version:minor && git add . && git commit -m \"v$(npm run version:show --silent): $(git log -1 --pretty=%B | head -1)\" && git push origin main",
-    "git:push:major": "npm run version:major && git add . && git commit -m \"v$(npm run version:show --silent): $(git log -1 --pretty=%B | head -1)\" && git push origin main",
-    "release": "npm run version:changelog && npm run git:push",
-    "release:minor": "npm run version:changelog && npm run git:push:minor",
-    "release:major": "npm run version:changelog && npm run git:push:major",
-    "release:tag": "./scripts/release.sh",
-    "release:tag:minor": "./scripts/release.sh",
-    "release:tag:major": "./scripts/release.sh"
+    "version:show": "node -p \"require('./package.json').version\""
   },
   "keywords": [
     "mcp",
