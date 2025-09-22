@@ -1,8 +1,9 @@
-name: PR Validation
+name: Pull Request Validation
 
 on:
   pull_request:
     branches: [ main, develop ]
+    types: [opened, synchronize, reopened]
 
 jobs:
   validate:
@@ -10,25 +11,65 @@ jobs:
     
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     
-    - name: Use Node.js 18.x
+    - name: Use Node.js 20.x
       uses: actions/setup-node@v4
       with:
-        node-version: '18.x'
+        node-version: '20.x'
         cache: 'npm'
     
     - name: Install dependencies
       run: npm ci
     
-    - name: Run linting
-      run: npm run lint || echo "No lint script found"
+    - name: Run security audit
+      run: npm audit --audit-level moderate
     
-    - name: Check code formatting
-      run: npm run format:check || echo "No format check script found"
+    - name: Check for vulnerabilities
+      run: npm audit --audit-level high
     
-    - name: Security audit
-      run: npm audit --audit-level moderate || true
-    
-    - name: Test server startup
+    - name: Validate package.json
       run: |
-        timeout 30s npm start || echo "Server startup test completed"
+        node -e "console.log('Validating package.json...'); JSON.parse(require('fs').readFileSync('package.json', 'utf8')); console.log('✅ package.json is valid');"
+    
+    - name: Check server.js syntax
+      run: |
+        node -c server.js
+        echo "✅ server.js syntax is valid"
+    
+    - name: Run code quality checks
+      run: |
+        echo "Running code quality checks..."
+        # Add more specific checks as needed
+        if [ -f "eslint.config.js" ]; then
+          npx eslint server.js
+        fi
+    
+    - name: Check for sensitive data
+      run: |
+        echo "Checking for sensitive data..."
+        if grep -r "password\|secret\|key\|token" --exclude-dir=node_modules --exclude="*.md" .; then
+          echo "⚠️  Potential sensitive data found. Please review."
+        else
+          echo "✅ No obvious sensitive data found."
+        fi
+    
+    - name: Validate API endpoints
+      run: |
+        echo "Validating API endpoints..."
+        # Check if server starts without errors
+        timeout 10s node server.js &
+        SERVER_PID=$!
+        sleep 5
+        
+        # Test health endpoint
+        if curl -f http://localhost:3000/health > /dev/null 2>&1; then
+          echo "✅ Health endpoint is working"
+        else
+          echo "❌ Health endpoint failed"
+          exit 1
+        fi
+        
+        # Clean up
+        kill $SERVER_PID 2>/dev/null || true

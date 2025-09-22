@@ -2,16 +2,17 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, develop, release/* ]
-  pull_request:
     branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    
     strategy:
       matrix:
-        node-version: [16.x, 18.x, 20.x]
+        node-version: [18.x, 20.x]
     
     steps:
     - uses: actions/checkout@v4
@@ -29,66 +30,52 @@ jobs:
       run: npm test
     
     - name: Run linting
-      run: npm run lint || true
+      run: npm run lint
     
-    - name: Check server health
-      run: |
-        npm start &
-        sleep 10
-        curl -f http://localhost:3000/health || exit 1
+    - name: Check formatting
+      run: npm run format:check
 
   build:
     needs: test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
     
     steps:
     - uses: actions/checkout@v4
     
-    - name: Use Node.js 18.x
+    - name: Use Node.js 20.x
       uses: actions/setup-node@v4
       with:
-        node-version: '18.x'
+        node-version: '20.x'
         cache: 'npm'
     
     - name: Install dependencies
       run: npm ci
     
     - name: Build application
-      run: npm run build || echo "No build script found"
+      run: npm run build
     
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: cursor-server-build
+        name: build-files
         path: |
           server.js
           package.json
           package-lock.json
-          README.md
 
-  deploy-staging:
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/develop'
-    environment: staging
-    
-    steps:
-    - name: Deploy to staging
-      run: |
-        echo "🚀 Deploying to staging environment"
-        echo "Branch: ${{ github.ref_name }}"
-        echo "Commit: ${{ github.sha }}"
-
-  deploy-production:
+  deploy:
     needs: build
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
-    environment: production
     
     steps:
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: build-files
+        path: ./
+    
     - name: Deploy to production
       run: |
-        echo "🚀 Deploying to production environment"
-        echo "Branch: ${{ github.ref_name }}"
-        echo "Commit: ${{ github.sha }}"
+        echo "Deployment would happen here"
+        echo "This could include Docker build, cloud deployment, etc."
