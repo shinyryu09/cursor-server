@@ -167,3 +167,98 @@ credentials/
 
 # Cursor CLI temporary files
 /tmp/cursor_prompt_*.txt
+
+# IntelliJ Plugin Build Directories
+mcp-intellij-plugin/build/
+mcp-intellij-plugin/.gradle/
+mcp-intellij-plugin/gradle/
+mcp-intellij-plugin/gradlew
+mcp-intellij-plugin/gradlew.bat
+
+# IntelliJ Plugin IDE files
+mcp-intellij-plugin/.idea/
+mcp-intellij-plugin/*.iml
+mcp-intellij-plugin/out/
+
+# IntelliJ Plugin Distribution files
+mcp-intellij-plugin/build/distributions/
+*.zip
+
+# IntelliJ Plugin Test results
+mcp-intellij-plugin/build/test-results/
+mcp-intellij-plugin/build/reports/
+
+# IntelliJ Plugin Sandbox
+mcp-intellij-plugin/build/idea-sandbox/
+
+# IntelliJ Plugin Instrumented code
+mcp-intellij-plugin/build/instrumented/
+
+# IntelliJ Plugin Searchable options
+mcp-intellij-plugin/build/searchableOptions/
+
+# IntelliJ Plugin Libs
+mcp-intellij-plugin/build/libs/
+
+# IntelliJ Plugin Kotlin build cache
+mcp-intellij-plugin/build/kotlin/
+
+# IntelliJ Plugin Patched files
+mcp-intellij-plugin/build/patchedPluginXmlFiles/
+
+# IntelliJ Plugin Resources
+mcp-intellij-plugin/build/resources/
+
+# IntelliJ Plugin Test classes
+mcp-intellij-plugin/build/test-classes/
+
+# IntelliJ Plugin Instrumented test code
+mcp-intellij-plugin/build/instrumentTestCode/
+
+# IntelliJ Plugin Prepare sandbox
+mcp-intellij-plugin/build/prepareSandbox/
+
+# IntelliJ Plugin Prepare testing sandbox
+mcp-intellij-plugin/build/prepareTestingSandbox/
+
+# IntelliJ Plugin Classpath index cleanup
+mcp-intellij-plugin/build/classpathIndexCleanup/
+
+# IntelliJ Plugin Jar searchable options
+mcp-intellij-plugin/build/jarSearchableOptions/
+
+# IntelliJ Plugin Build plugin
+mcp-intellij-plugin/build/buildPlugin/
+
+# IntelliJ Plugin Assemble
+mcp-intellij-plugin/build/assemble/
+
+# IntelliJ Plugin Check
+mcp-intellij-plugin/build/check/
+
+# IntelliJ Plugin Process resources
+mcp-intellij-plugin/build/processResources/
+
+# IntelliJ Plugin Process test resources
+mcp-intellij-plugin/build/processTestResources/
+
+# IntelliJ Plugin Classes
+mcp-intellij-plugin/build/classes/
+
+# IntelliJ Plugin Instrument code
+mcp-intellij-plugin/build/instrumentCode/
+
+# IntelliJ Plugin Jar
+mcp-intellij-plugin/build/jar/
+
+# IntelliJ Plugin Test
+mcp-intellij-plugin/build/test/
+
+# IntelliJ Plugin Test classes
+mcp-intellij-plugin/build/testClasses/
+
+# IntelliJ Plugin Instrumented jar
+mcp-intellij-plugin/build/instrumentedJar/
+
+# IntelliJ Plugin Libs searchable options
+mcp-intellij-plugin/build/libsSearchableOptions/
