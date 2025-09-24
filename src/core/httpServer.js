@@ -2,21 +2,18 @@ import express from 'express';
 import cors from 'cors';
 import logger from '../utils/logger.js';
 import config from '../config/config.js';
-import ProjectDetector from '../services/projectDetector.js';
-import CursorEditorService from '../services/cursorEditorService.js';
 import AIService from '../services/aiService.js';
-import ChatHistoryService from '../services/chatHistoryService.js';
+import ProjectDetector from '../services/projectDetector.js';
 
 /**
- * HTTP MCP 서버
+ * HTTP 서버 클래스 - 플러그인과의 통신을 위한 REST API 제공
  */
-export class HttpMCPServer {
+export class HttpServer {
   constructor() {
     this.app = express();
-    this.projectDetector = new ProjectDetector();
-    this.cursorEditorService = new CursorEditorService();
+    this.server = null;
     this.aiService = new AIService();
-    this.chatHistoryService = new ChatHistoryService();
+    this.projectDetector = new ProjectDetector();
     
     this.setupMiddleware();
     this.setupRoutes();
@@ -26,41 +23,13 @@ export class HttpMCPServer {
    * 미들웨어 설정
    */
   setupMiddleware() {
-    // CORS 설정 (최적화)
-    this.app.use(cors({
-      origin: '*',
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control'],
-      credentials: false
-    }));
+    this.app.use(cors());
+    this.app.use(express.json());
+    this.app.use(express.urlencoded({ extended: true }));
     
-    // JSON 파싱 최적화
-    this.app.use(express.json({ 
-      limit: '10mb',
-      verify: (req, res, buf) => {
-        // JSON 파싱 속도 최적화
-        req.rawBody = buf;
-      }
-    }));
-    
-    this.app.use(express.urlencoded({ 
-      extended: true, 
-      limit: '10mb' 
-    }));
-    
-    // 로깅 미들웨어 (최적화)
+    // 요청 로깅
     this.app.use((req, res, next) => {
-      const start = Date.now();
-      const timestamp = new Date().toISOString();
-      
-      res.on('finish', () => {
-        const duration = Date.now() - start;
-        // 빠른 응답만 로깅 (100ms 이하)
-        if (duration > 100) {
-          logger.info(`[${timestamp}] ${req.method} ${req.path} - ${res.statusCode} (${duration}ms)`);
-        }
-      });
-      
+      logger.debug(`${req.method} ${req.path}`, { body: req.body });
       next();
     });
   }
@@ -71,744 +40,249 @@ export class HttpMCPServer {
   setupRoutes() {
     // 헬스 체크
     this.app.get('/health', (req, res) => {
-      res.json({
-        status: 'healthy',
+      res.json({ 
+        status: 'ok', 
         timestamp: new Date().toISOString(),
-        uptime: process.uptime(),
+        version: config.version,
+        name: config.mcp.name
+      });
+    });
+
+    // 루트 경로
+    this.app.get('/', (req, res) => {
+      res.json({
+        name: config.mcp.name,
         version: config.mcp.version,
-        server: {
-          name: config.mcp.name,
-          description: config.mcp.description,
-          startTime: new Date().toISOString()
-        },
-        workspace: process.cwd(),
-        memory: {
-          used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
-          total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024)
+        description: 'MCP Cursor Server HTTP API',
+        endpoints: {
+          health: '/health',
+          models: '/api/models',
+          chat: '/api/chat',
+          analyze: '/api/analyze',
+          generate: '/api/generate'
         }
       });
     });
 
-    // 프로젝트 정보
-    this.app.get('/project-info', async (req, res) => {
+    // AI 모델 목록 조회 (플러그인 호환성)
+    this.app.get('/v1/models', async (req, res) => {
       try {
-        const project = this.projectDetector.getCurrentProject();
-        res.json(project || { type: null, name: null, path: null });
-      } catch (error) {
-        logger.error('프로젝트 정보 조회 오류:', error);
-        res.status(500).json({ error: '프로젝트 정보 조회 실패' });
-      }
-    });
-
-    // OpenAI 호환 API 엔드포인트 (Xcode Code Intelligence용)
-    this.app.get('/v1/models', (req, res) => {
-      res.json({
-        object: 'list',
-        data: [
-          {
-            id: 'cursor-editor',
-            object: 'model',
-            created: Math.floor(Date.now() / 1000),
-            owned_by: 'mcp-cursor-server',
-            status: 'active',
-            description: 'Cursor Editor HTTP API를 통한 코드 생성 및 분석'
-          },
-          {
-            id: 'cursor-ai',
-            object: 'model',
-            created: Math.floor(Date.now() / 1000),
-            owned_by: 'mcp-cursor-server',
-            status: 'active',
-            description: 'AI 모델을 통한 코드 생성 및 분석'
-          }
-        ]
-      });
-    });
-
-    // OpenAI 호환 모델 정보 엔드포인트
-    this.app.get('/v1/models/:modelId', (req, res) => {
-      const { modelId } = req.params;
-      
-      if (modelId === 'cursor-editor' || modelId === 'cursor-ai') {
+        const models = this.aiService.getAvailableModels();
         res.json({
-          id: modelId,
-          object: 'model',
-          created: Math.floor(Date.now() / 1000),
-          owned_by: 'mcp-cursor-server',
-          status: 'active',
-          description: modelId === 'cursor-editor' 
-            ? 'Cursor Editor HTTP API를 통한 코드 생성 및 분석'
-            : 'AI 모델을 통한 코드 생성 및 분석'
+          data: models.map(model => ({
+            id: model.id,
+            name: model.name,
+            type: model.type,
+            available: model.available,
+            description: model.description || `${model.name} AI 모델`
+          }))
         });
-      } else {
-        res.status(404).json({
+      } catch (error) {
+        logger.error('모델 목록 조회 오류:', error);
+        res.status(500).json({
           error: {
-            message: 'Model not found',
-            type: 'not_found'
+            message: error.message
           }
         });
       }
     });
 
-    // OpenAI 호환 채팅 완료 엔드포인트
+    // AI 모델 목록 조회 (기존 API)
+    this.app.get('/api/models', async (req, res) => {
+      try {
+        const models = this.aiService.getAvailableModels();
+        res.json({
+          success: true,
+          models: models
+        });
+      } catch (error) {
+        logger.error('모델 목록 조회 오류:', error);
+        res.status(500).json({
+          success: false,
+          error: error.message
+        });
+      }
+    });
+
+    // AI 채팅 (플러그인 호환성 - 스트리밍)
     this.app.post('/v1/chat/completions', async (req, res) => {
       try {
-        const { model, messages, stream = false } = req.body;
+        const { model = 'cursor-default', messages, stream = false } = req.body;
         
-        if (!model || !messages || !Array.isArray(messages)) {
+        if (!messages || !Array.isArray(messages) || messages.length === 0) {
           return res.status(400).json({
             error: {
-              message: 'Invalid request: model and messages are required',
-              type: 'invalid_request_error'
+              message: '메시지가 필요합니다'
             }
           });
         }
 
-        // 마지막 사용자 메시지 추출 (최적화)
+        // 마지막 사용자 메시지 추출
         const lastMessage = messages[messages.length - 1];
-        let userMessage = '';
-        
-        if (typeof lastMessage?.content === 'string') {
-          userMessage = lastMessage.content;
-        } else if (Array.isArray(lastMessage?.content)) {
-          // Xcode에서 보내는 배열 형태 처리
-          userMessage = lastMessage.content
-            .filter(item => item.type === 'text')
-            .map(item => item.text)
-            .join(' ');
-        }
-        
-        // 프로젝트 감지 (캐시 활용)
-        const project = this.projectDetector.getCurrentProject();
-        const projectContext = project ? `\n프로젝트: ${project.name} (${project.type})` : '';
-        
-        // 빠른 응답 생성
-        let response = '';
-        
-        if (model === 'cursor-editor') {
-          response = `안녕하세요! Cursor Editor가 도움을 드리겠습니다.${projectContext}\n\n질문: ${userMessage}\n\n어떤 도움이 필요하신가요?`;
-        } else if (model === 'cursor-ai') {
-          response = `안녕하세요! AI가 도움을 드리겠습니다.${projectContext}\n\n질문: ${userMessage}\n\n어떤 도움이 필요하신가요?`;
+        const userMessage = lastMessage.content;
+
+        if (stream) {
+          // 스트리밍 응답
+          res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+          res.setHeader('Cache-Control', 'no-cache');
+          res.setHeader('Connection', 'keep-alive');
+
+          const response = await this.aiService.chat(userMessage, model);
+          const responseText = typeof response === 'string' ? response : response.content || JSON.stringify(response);
+          
+          // OpenAI 스타일 스트리밍 응답
+          const streamResponse = {
+            id: `chatcmpl-${Date.now()}`,
+            object: 'chat.completion.chunk',
+            created: Math.floor(Date.now() / 1000),
+            model: model,
+            choices: [{
+              index: 0,
+              delta: { content: responseText },
+              finish_reason: 'stop'
+            }]
+          };
+
+          res.write(`data: ${JSON.stringify(streamResponse)}\n\n`);
+          res.write('data: [DONE]\n\n');
+          res.end();
         } else {
-          return res.status(400).json({
-            error: {
-              message: `Unknown model: ${model}`,
-              type: 'invalid_request_error'
-            }
-          });
-        }
-
-        // 스트리밍 헤더 설정 (최적화)
-        res.setHeader('Content-Type', 'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection', 'keep-alive');
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Headers', 'Cache-Control');
-        res.setHeader('X-Accel-Buffering', 'no'); // Nginx 버퍼링 비활성화
-        
-        // 즉시 응답 시작
-        const responseId = `chatcmpl-${Date.now()}`;
-        const created = Math.floor(Date.now() / 1000);
-        
-        // 응답을 작은 청크로 분할하여 빠른 스트리밍
-        const words = response.split(' ');
-        let currentContent = '';
-        
-        // 첫 번째 청크 즉시 전송
-        res.write(`data: ${JSON.stringify({
-          id: responseId,
-          object: 'chat.completion.chunk',
-          created: created,
-          model: model,
-          choices: [{
-            index: 0,
-            delta: { content: '' },
-            finish_reason: null
-          }]
-        })}\n\n`);
-
-        // 단어별로 빠르게 스트리밍
-        let wordIndex = 0;
-        const streamInterval = setInterval(() => {
-          if (wordIndex < words.length) {
-            const word = words[wordIndex] + (wordIndex < words.length - 1 ? ' ' : '');
-            currentContent += word;
-            
-            res.write(`data: ${JSON.stringify({
-              id: responseId,
-              object: 'chat.completion.chunk',
-              created: created,
-              model: model,
-              choices: [{
-                index: 0,
-                delta: { content: word },
-                finish_reason: null
-              }]
-            })}\n\n`);
-            
-            wordIndex++;
-          } else {
-            clearInterval(streamInterval);
-            
-            // 완료 신호
-            res.write(`data: ${JSON.stringify({
-              id: responseId,
-              object: 'chat.completion.chunk',
-              created: created,
-              model: model,
-              choices: [{
-                index: 0,
-                delta: {},
-                finish_reason: 'stop'
-              }]
-            })}\n\n`);
-            
-            res.write('data: [DONE]\n\n');
-            res.end();
-          }
-        }, 3); // 3ms로 매우 빠르게
-        
-      } catch (error) {
-        logger.error('Chat completions 오류:', error);
-        res.status(500).json({
-          error: {
-            message: 'Internal server error',
-            type: 'server_error'
-          }
-        });
-      }
-    });
-
-    // MCP 초기화
-    this.app.post('/mcp/initialize', async (req, res) => {
-      try {
-        logger.info('MCP 서버 초기화 요청');
-        
-        // 프로젝트 감지
-        const project = await this.projectDetector.detectProject();
-        
-        res.json({
-          jsonrpc: '2.0',
-          id: req.body.id,
-          result: {
-            protocolVersion: '2024-11-05',
-            capabilities: {
-              resources: {
-                subscribe: true,
-                listChanged: true
-              },
-              tools: {
-                listChanged: true
-              },
-              prompts: {
-                listChanged: true
-              }
-            },
-            serverInfo: {
-              name: config.mcp.name,
-              version: config.mcp.version,
-              description: config.mcp.description
-            },
-            project: project
-          }
-        });
-      } catch (error) {
-        logger.error('MCP 초기화 오류:', error);
-        res.status(500).json({
-          jsonrpc: '2.0',
-          id: req.body.id,
-          error: {
-            code: -32603,
-            message: 'Internal error',
-            data: error.message
-          }
-        });
-      }
-    });
-
-    // 리소스 목록
-    this.app.post('/mcp/resources/list', async (req, res) => {
-      try {
-        const project = this.projectDetector.getCurrentProject();
-        const resources = [];
-
-        if (project) {
-          resources.push({
-            uri: `project://${project.type}`,
-            name: project.name,
-            description: `${project.type} 프로젝트: ${project.name}`,
-            mimeType: 'application/json'
-          });
-
-          if (project.type === 'xcode' && project.projectFile) {
-            resources.push({
-              uri: `file://${project.projectFile}`,
-              name: `${project.name}.xcodeproj`,
-              description: 'Xcode 프로젝트 파일',
-              mimeType: 'application/x-xcode-project'
-            });
-          }
-        }
-
-        res.json({
-          jsonrpc: '2.0',
-          id: req.body.id,
-          result: { resources }
-        });
-      } catch (error) {
-        logger.error('리소스 목록 오류:', error);
-        res.status(500).json({
-          jsonrpc: '2.0',
-          id: req.body.id,
-          error: {
-            code: -32603,
-            message: 'Internal error',
-            data: error.message
-          }
-        });
-      }
-    });
-
-    // 리소스 읽기
-    this.app.post('/mcp/resources/read', async (req, res) => {
-      try {
-        const { uri } = req.body.params;
-        
-        if (uri.startsWith('project://')) {
-          const project = this.projectDetector.getCurrentProject();
-          res.json({
-            jsonrpc: '2.0',
-            id: req.body.id,
-            result: {
-              contents: [
-                {
-                  uri,
-                  mimeType: 'application/json',
-                  text: JSON.stringify(project, null, 2)
-                }
-              ]
-            }
-          });
-        } else if (uri.startsWith('file://')) {
-          const filePath = uri.replace('file://', '');
-          const fs = await import('fs/promises');
-          const content = await fs.readFile(filePath, 'utf8');
-          const mimeType = this.getMimeType(filePath);
+          // 일반 응답
+          const response = await this.aiService.chat(userMessage, model);
+          const responseText = typeof response === 'string' ? response : response.content || JSON.stringify(response);
           
           res.json({
-            jsonrpc: '2.0',
-            id: req.body.id,
-            result: {
-              contents: [
-                {
-                  uri,
-                  mimeType,
-                  text: content
-                }
-              ]
-            }
-          });
-        } else {
-          res.status(400).json({
-            jsonrpc: '2.0',
-            id: req.body.id,
-            error: {
-              code: -32602,
-              message: 'Invalid params',
-              data: `지원하지 않는 리소스 URI: ${uri}`
-            }
+            id: `chatcmpl-${Date.now()}`,
+            object: 'chat.completion',
+            created: Math.floor(Date.now() / 1000),
+            model: model,
+            choices: [{
+              index: 0,
+              message: {
+                role: 'assistant',
+                content: responseText
+              },
+              finish_reason: 'stop'
+            }]
           });
         }
       } catch (error) {
-        logger.error('리소스 읽기 오류:', error);
+        logger.error('채팅 오류:', error);
         res.status(500).json({
-          jsonrpc: '2.0',
-          id: req.body.id,
           error: {
-            code: -32603,
-            message: 'Internal error',
-            data: error.message
+            message: error.message
           }
         });
       }
     });
 
-    // 도구 목록
-    this.app.post('/mcp/tools/list', async (req, res) => {
+    // AI 채팅 (기존 API)
+    this.app.post('/api/chat', async (req, res) => {
       try {
-        res.json({
-          jsonrpc: '2.0',
-          id: req.body.id,
-          result: {
-            tools: [
-              {
-                name: 'detect_project',
-                description: '현재 작업 디렉토리에서 프로젝트 감지',
-                inputSchema: {
-                  type: 'object',
-                  properties: {
-                    workingDir: {
-                      type: 'string',
-                      description: '작업 디렉토리 경로 (선택사항)'
-                    }
-                  }
-                }
-              },
-              {
-                name: 'cursor_editor_chat',
-                description: 'Cursor Editor HTTP API를 사용한 채팅',
-                inputSchema: {
-                  type: 'object',
-                  properties: {
-                    message: {
-                      type: 'string',
-                      description: '채팅 메시지'
-                    },
-                    files: {
-                      type: 'array',
-                      items: { type: 'string' },
-                      description: '관련 파일 경로들 (선택사항)'
-                    }
-                  },
-                  required: ['message']
-                }
-              },
-              {
-                name: 'ai_chat',
-                description: 'AI 모델을 사용한 채팅',
-                inputSchema: {
-                  type: 'object',
-                  properties: {
-                    message: {
-                      type: 'string',
-                      description: '채팅 메시지'
-                    },
-                    model: {
-                      type: 'string',
-                      description: '사용할 AI 모델',
-                      enum: ['gpt-4', 'gpt-3.5-turbo', 'claude-3-5-sonnet', 'gemini-pro']
-                    },
-                    context: {
-                      type: 'string',
-                      description: '추가 컨텍스트 (선택사항)'
-                    }
-                  },
-                  required: ['message', 'model']
-                }
-              }
-            ]
-          }
-        });
-      } catch (error) {
-        logger.error('도구 목록 오류:', error);
-        res.status(500).json({
-          jsonrpc: '2.0',
-          id: req.body.id,
-          error: {
-            code: -32603,
-            message: 'Internal error',
-            data: error.message
-          }
-        });
-      }
-    });
-
-    // 도구 실행
-    this.app.post('/mcp/tools/call', async (req, res) => {
-      try {
-        const { name, arguments: args } = req.body.params;
-
-        let result;
-        switch (name) {
-          case 'detect_project':
-            const project = await this.projectDetector.detectProject(args.workingDir);
-            result = {
-              content: [
-                {
-                  type: 'text',
-                  text: project 
-                    ? `프로젝트 감지됨: ${project.name} (${project.type}) - ${project.path}`
-                    : '프로젝트를 찾을 수 없습니다.'
-                }
-              ]
-            };
-            break;
-
-          case 'cursor_editor_chat':
-            const cursorEditorResult = await this.cursorEditorService.chat(args.message, args.files);
-            result = {
-              content: [
-                {
-                  type: 'text',
-                  text: cursorEditorResult
-                }
-              ]
-            };
-            break;
-
-          case 'ai_chat':
-            const aiResult = await this.aiService.chat(args.message, args.model, args.context);
-            result = {
-              content: [
-                {
-                  type: 'text',
-                  text: aiResult
-                }
-              ]
-            };
-            break;
-
-          default:
-            throw new Error(`알 수 없는 도구: ${name}`);
+        const { message, model = 'cursor-default', context } = req.body;
+        
+        if (!message) {
+          return res.status(400).json({
+            success: false,
+            error: '메시지가 필요합니다'
+          });
         }
 
+        const response = await this.aiService.chat(message, model, context);
+        
         res.json({
-          jsonrpc: '2.0',
-          id: req.body.id,
-          result
+          success: true,
+          response: response,
+          model: model
         });
       } catch (error) {
-        logger.error(`도구 실행 오류 (${req.body.params.name}):`, error);
+        logger.error('채팅 오류:', error);
         res.status(500).json({
-          jsonrpc: '2.0',
-          id: req.body.id,
-          error: {
-            code: -32603,
-            message: 'Internal error',
-            data: error.message
-          }
+          success: false,
+          error: error.message
         });
       }
     });
 
-    // 채팅 히스토리 API 엔드포인트
-    this.setupChatHistoryRoutes();
+    // 코드 분석
+    this.app.post('/api/analyze', async (req, res) => {
+      try {
+        const { code, filePath, analysisType = 'general' } = req.body;
+        
+        if (!code) {
+          return res.status(400).json({
+            success: false,
+            error: '코드가 필요합니다'
+          });
+        }
 
-    // 404 핸들러
-    this.app.use('*', (req, res) => {
+        const project = this.projectDetector.getCurrentProject();
+        let prompt = `다음 ${project?.type || '코드'}를 분석해주세요:\n\n`;
+        prompt += `분석 유형: ${analysisType}\n`;
+        if (filePath) prompt += `파일 경로: ${filePath}\n`;
+        prompt += `\n코드:\n\`\`\`\n${code}\n\`\`\``;
+
+        const response = await this.aiService.chat(prompt, 'gpt-4');
+        
+        res.json({
+          success: true,
+          analysis: response,
+          analysisType: analysisType
+        });
+      } catch (error) {
+        logger.error('코드 분석 오류:', error);
+        res.status(500).json({
+          success: false,
+          error: error.message
+        });
+      }
+    });
+
+    // 코드 생성
+    this.app.post('/api/generate', async (req, res) => {
+      try {
+        const { prompt, model = 'gpt-4', context } = req.body;
+        
+        if (!prompt) {
+          return res.status(400).json({
+            success: false,
+            error: '프롬프트가 필요합니다'
+          });
+        }
+
+        const response = await this.aiService.chat(prompt, model, context);
+        
+        res.json({
+          success: true,
+          generatedCode: response,
+          model: model
+        });
+      } catch (error) {
+        logger.error('코드 생성 오류:', error);
+        res.status(500).json({
+          success: false,
+          error: error.message
+        });
+      }
+    });
+
+    // 404 처리
+    this.app.use((req, res) => {
       res.status(404).json({
-        error: 'Endpoint not found',
-        path: req.originalUrl,
-        method: req.method
+        success: false,
+        error: '엔드포인트를 찾을 수 없습니다',
+        path: req.originalUrl
       });
     });
-  }
 
-  /**
-   * 채팅 히스토리 라우트 설정
-   */
-  setupChatHistoryRoutes() {
-    // 새 세션 생성
-    this.app.post('/api/chat/sessions', async (req, res) => {
-      try {
-        const sessionId = this.chatHistoryService.generateSessionId();
-        res.json({
-          sessionId,
-          message: '새 채팅 세션이 생성되었습니다.',
-          timestamp: new Date().toISOString()
-        });
-      } catch (error) {
-        logger.error('세션 생성 실패:', error);
-        res.status(500).json({
-          error: '세션 생성 실패',
-          message: error.message
-        });
-      }
+    // 에러 처리
+    this.app.use((error, req, res, next) => {
+      logger.error('HTTP 서버 오류:', error);
+      res.status(500).json({
+        success: false,
+        error: '내부 서버 오류'
+      });
     });
-
-    // 채팅 메시지 저장
-    this.app.post('/api/chat/sessions/:sessionId/messages', async (req, res) => {
-      try {
-        const { sessionId } = req.params;
-        const { message, response, metadata } = req.body;
-
-        if (!message || !response) {
-          return res.status(400).json({
-            error: 'Bad Request',
-            message: 'message와 response는 필수입니다.'
-          });
-        }
-
-        const messageId = await this.chatHistoryService.saveMessage(
-          sessionId,
-          message,
-          response,
-          metadata
-        );
-
-        res.json({
-          messageId,
-          sessionId,
-          message: '채팅 메시지가 저장되었습니다.',
-          timestamp: new Date().toISOString()
-        });
-      } catch (error) {
-        logger.error('메시지 저장 실패:', error);
-        res.status(500).json({
-          error: '메시지 저장 실패',
-          message: error.message
-        });
-      }
-    });
-
-    // 세션 히스토리 조회
-    this.app.get('/api/chat/sessions/:sessionId', async (req, res) => {
-      try {
-        const { sessionId } = req.params;
-        const { limit = 50 } = req.query;
-
-        const history = await this.chatHistoryService.getSessionHistory(
-          sessionId,
-          parseInt(limit)
-        );
-
-        if (!history) {
-          return res.status(404).json({
-            error: 'Not Found',
-            message: '세션을 찾을 수 없습니다.'
-          });
-        }
-
-        res.json(history);
-      } catch (error) {
-        logger.error('히스토리 조회 실패:', error);
-        res.status(500).json({
-          error: '히스토리 조회 실패',
-          message: error.message
-        });
-      }
-    });
-
-    // 모든 세션 목록 조회
-    this.app.get('/api/chat/sessions', async (req, res) => {
-      try {
-        const sessions = await this.chatHistoryService.getAllSessions();
-        res.json({
-          sessions,
-          count: sessions.length,
-          timestamp: new Date().toISOString()
-        });
-      } catch (error) {
-        logger.error('세션 목록 조회 실패:', error);
-        res.status(500).json({
-          error: '세션 목록 조회 실패',
-          message: error.message
-        });
-      }
-    });
-
-    // 세션 삭제
-    this.app.delete('/api/chat/sessions/:sessionId', async (req, res) => {
-      try {
-        const { sessionId } = req.params;
-        const deleted = await this.chatHistoryService.deleteSession(sessionId);
-
-        if (!deleted) {
-          return res.status(404).json({
-            error: 'Not Found',
-            message: '세션을 찾을 수 없습니다.'
-          });
-        }
-
-        res.json({
-          message: '세션이 삭제되었습니다.',
-          sessionId,
-          timestamp: new Date().toISOString()
-        });
-      } catch (error) {
-        logger.error('세션 삭제 실패:', error);
-        res.status(500).json({
-          error: '세션 삭제 실패',
-          message: error.message
-        });
-      }
-    });
-
-    // 히스토리 검색
-    this.app.get('/api/chat/search', async (req, res) => {
-      try {
-        const { q: keyword, limit = 20 } = req.query;
-
-        if (!keyword) {
-          return res.status(400).json({
-            error: 'Bad Request',
-            message: '검색 키워드(q)는 필수입니다.'
-          });
-        }
-
-        const results = await this.chatHistoryService.searchHistory(
-          keyword,
-          parseInt(limit)
-        );
-
-        res.json({
-          keyword,
-          results,
-          count: results.length,
-          timestamp: new Date().toISOString()
-        });
-      } catch (error) {
-        logger.error('히스토리 검색 실패:', error);
-        res.status(500).json({
-          error: '히스토리 검색 실패',
-          message: error.message
-        });
-      }
-    });
-
-    // 히스토리 통계
-    this.app.get('/api/chat/stats', async (req, res) => {
-      try {
-        const stats = await this.chatHistoryService.getStatistics();
-        res.json({
-          ...stats,
-          timestamp: new Date().toISOString()
-        });
-      } catch (error) {
-        logger.error('통계 조회 실패:', error);
-        res.status(500).json({
-          error: '통계 조회 실패',
-          message: error.message
-        });
-      }
-    });
-
-    // 오래된 세션 정리
-    this.app.post('/api/chat/cleanup', async (req, res) => {
-      try {
-        const result = await this.chatHistoryService.cleanupOldSessions();
-        res.json({
-          ...result,
-          timestamp: new Date().toISOString()
-        });
-      } catch (error) {
-        logger.error('세션 정리 실패:', error);
-        res.status(500).json({
-          error: '세션 정리 실패',
-          message: error.message
-        });
-      }
-    });
-  }
-
-  /**
-   * MIME 타입 결정
-   */
-  getMimeType(filePath) {
-    const ext = filePath.split('.').pop().toLowerCase();
-    const mimeTypes = {
-      'swift': 'text/x-swift',
-      'kt': 'text/x-kotlin',
-      'java': 'text/x-java',
-      'js': 'text/javascript',
-      'ts': 'text/typescript',
-      'json': 'application/json',
-      'xml': 'application/xml',
-      'html': 'text/html',
-      'css': 'text/css',
-      'md': 'text/markdown'
-    };
-    return mimeTypes[ext] || 'text/plain';
   }
 
   /**
@@ -816,24 +290,21 @@ export class HttpMCPServer {
    */
   async start() {
     try {
-      // 서비스 초기화
-      await this.cursorEditorService.initialize();
-      await this.chatHistoryService.initialize();
-      logger.info('HTTP MCP 서버 서비스 초기화 완료');
+      // AI 서비스 초기화
+      await this.aiService.initialize();
       
-      // 프로젝트 미리 감지 (캐시 준비)
-      logger.info('프로젝트 미리 감지 중...');
-      await this.projectDetector.detectProject();
-      
-      this.server = this.app.listen(config.server.port, config.server.host, () => {
-        logger.info(`🚀 HTTP MCP Server v${config.mcp.version} is running on ${config.server.host}:${config.server.port}`);
-        logger.info(`📁 Default workspace: ${process.cwd()}`);
-        logger.info(`🔗 Health check: http://${config.server.host}:${config.server.port}/health`);
-        logger.info(`🤖 MCP endpoints: http://${config.server.host}:${config.server.port}/mcp/*`);
-        logger.info(`⚡ Response optimization: Enabled (caching, streaming, compression)`);
+      return new Promise((resolve, reject) => {
+        this.server = this.app.listen(config.server.port, config.server.host, (error) => {
+          if (error) {
+            reject(error);
+          } else {
+            logger.info(`HTTP 서버가 시작되었습니다: http://${config.server.host}:${config.server.port}`);
+            resolve();
+          }
+        });
       });
     } catch (error) {
-      logger.error('HTTP MCP 서버 시작 실패:', error);
+      logger.error('HTTP 서버 시작 실패:', error);
       throw error;
     }
   }
@@ -847,13 +318,14 @@ export class HttpMCPServer {
         await new Promise((resolve) => {
           this.server.close(resolve);
         });
-        logger.info('HTTP MCP 서버가 중지되었습니다');
+        logger.info('HTTP 서버가 중지되었습니다');
       }
+      
+      // AI 서비스 정리
+      this.aiService.stopCacheMaintenance();
     } catch (error) {
-      logger.error('HTTP MCP 서버 중지 실패:', error);
+      logger.error('HTTP 서버 중지 실패:', error);
       throw error;
     }
   }
 }
-
-export default HttpMCPServer;

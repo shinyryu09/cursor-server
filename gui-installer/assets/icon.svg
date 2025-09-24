@@ -1,0 +1,26 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle -->
+  <circle cx="256" cy="256" r="240" fill="#667eea" stroke="#5a67d8" stroke-width="8"/>
+  
+  <!-- Inner circle -->
+  <circle cx="256" cy="256" r="180" fill="#764ba2" opacity="0.8"/>
+  
+  <!-- MCP Logo -->
+  <text x="256" y="200" font-family="Arial, sans-serif" font-size="80" font-weight="bold" text-anchor="middle" fill="white">MCP</text>
+  
+  <!-- Cursor symbol -->
+  <path d="M 200 300 L 250 300 L 240 320 L 280 320 L 270 340 L 200 340 Z" fill="white" opacity="0.9"/>
+  
+  <!-- Server symbol -->
+  <rect x="320" y="300" width="40" height="40" fill="white" opacity="0.9" rx="4"/>
+  <rect x="325" y="305" width="30" height="8" fill="#667eea"/>
+  <rect x="325" y="318" width="30" height="8" fill="#667eea"/>
+  <rect x="325" y="331" width="30" height="8" fill="#667eea"/>
+  
+  <!-- Decorative elements -->
+  <circle cx="150" cy="150" r="20" fill="white" opacity="0.3"/>
+  <circle cx="362" cy="150" r="15" fill="white" opacity="0.3"/>
+  <circle cx="150" cy="362" r="15" fill="white" opacity="0.3"/>
+  <circle cx="362" cy="362" r="20" fill="white" opacity="0.3"/>
+</svg>
+

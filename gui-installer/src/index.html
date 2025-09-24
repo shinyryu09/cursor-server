@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Cursor Server 설치 프로그램</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+
+        .sidebar {
+            width: 300px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 30px 20px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 2px 0 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .main-content {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+
+        .logo {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .logo h1 {
+            font-size: 24px;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 8px;
+        }
+
+        .logo p {
+            color: #718096;
+            font-size: 14px;
+        }
+
+        .step-list {
+            list-style: none;
+            margin-bottom: 30px;
+        }
+
+        .step-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #e2e8f0;
+            transition: all 0.3s ease;
+        }
+
+        .step-item:last-child {
+            border-bottom: none;
+        }
+
+        .step-number {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #e2e8f0;
+            color: #718096;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 600;
+            margin-right: 12px;
+            transition: all 0.3s ease;
+        }
+
+        .step-item.active .step-number {
+            background: #4299e1;
+            color: white;
+        }
+
+        .step-item.completed .step-number {
+            background: #48bb78;
+            color: white;
+        }
+
+        .step-text {
+            font-size: 14px;
+            color: #4a5568;
+        }
+
+        .step-item.active .step-text {
+            color: #2d3748;
+            font-weight: 600;
+        }
+
+        .step-item.completed .step-text {
+            color: #48bb78;
+        }
+
+        .content-section {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .content-section.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .section-title {
+            font-size: 28px;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 16px;
+        }
+
+        .section-description {
+            font-size: 16px;
+            color: #718096;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: #4a5568;
+            margin-bottom: 8px;
+        }
+
+        .path-input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s ease;
+        }
+
+        .path-input:focus {
+            outline: none;
+            border-color: #4299e1;
+        }
+
+        .path-button {
+            background: #4299e1;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            margin-left: 12px;
+        }
+
+        .path-button:hover {
+            background: #3182ce;
+        }
+
+        .progress-container {
+            margin: 30px 0;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e2e8f0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 16px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4299e1, #48bb78);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+
+        .progress-text {
+            text-align: center;
+            font-size: 14px;
+            color: #4a5568;
+            font-weight: 600;
+        }
+
+        .log-container {
+            background: #1a202c;
+            color: #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 12px;
+            line-height: 1.5;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+
+        .log-entry {
+            margin-bottom: 4px;
+            display: flex;
+            align-items: flex-start;
+        }
+
+        .log-timestamp {
+            color: #718096;
+            margin-right: 8px;
+            flex-shrink: 0;
+        }
+
+        .log-message {
+            flex: 1;
+        }
+
+        .log-entry.success .log-message {
+            color: #48bb78;
+        }
+
+        .log-entry.error .log-message {
+            color: #f56565;
+        }
+
+        .log-entry.warning .log-message {
+            color: #ed8936;
+        }
+
+        .log-entry.info .log-message {
+            color: #4299e1;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 12px;
+            margin-top: 30px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+
+        .btn-primary {
+            background: #4299e1;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #3182ce;
+        }
+
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+
+        .btn-secondary:hover {
+            background: #cbd5e0;
+        }
+
+        .btn-success {
+            background: #48bb78;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #38a169;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .status-card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            margin-bottom: 24px;
+        }
+
+        .status-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 12px;
+        }
+
+        .status-description {
+            color: #718096;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .feature-list {
+            list-style: none;
+            margin: 20px 0;
+        }
+
+        .feature-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 0;
+            color: #4a5568;
+        }
+
+        .feature-item::before {
+            content: "✓";
+            color: #48bb78;
+            font-weight: bold;
+            margin-right: 12px;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .mt-4 {
+            margin-top: 16px;
+        }
+
+        .mb-4 {
+            margin-bottom: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <div class="logo">
+                <h1>MCP Cursor Server</h1>
+                <p>설치 프로그램</p>
+            </div>
+            
+            <ul class="step-list">
+                <li class="step-item" data-step="0">
+                    <div class="step-number">1</div>
+                    <div class="step-text">환영합니다</div>
+                </li>
+                <li class="step-item" data-step="1">
+                    <div class="step-number">2</div>
+                    <div class="step-text">설치 경로 선택</div>
+                </li>
+                <li class="step-item" data-step="2">
+                    <div class="step-number">3</div>
+                    <div class="step-text">설치 진행</div>
+                </li>
+                <li class="step-item" data-step="3">
+                    <div class="step-number">4</div>
+                    <div class="step-text">설치 완료</div>
+                </li>
+            </ul>
+        </div>
+
+        <div class="main-content">
+            <!-- 환영 화면 -->
+            <div class="content-section active" id="welcome">
+                <h1 class="section-title">MCP Cursor Server에 오신 것을 환영합니다!</h1>
+                <p class="section-description">
+                    이 설치 프로그램은 MCP Cursor Server를 컴퓨터에 설치하고 설정하는 과정을 안내합니다.
+                </p>
+
+                <div class="status-card">
+                    <h3 class="status-title">주요 기능</h3>
+                    <ul class="feature-list">
+                        <li class="feature-item">MCP 프로토콜 지원</li>
+                        <li class="feature-item">다중 AI 모델 지원 (OpenAI, Anthropic, Google, Cursor)</li>
+                        <li class="feature-item">Xcode 및 Android 프로젝트 자동 감지</li>
+                        <li class="feature-item">Cursor Editor 연동</li>
+                        <li class="feature-item">실시간 채팅 및 코드 생성</li>
+                        <li class="feature-item">스마트 캐시 시스템</li>
+                    </ul>
+                </div>
+
+                <div class="status-card">
+                    <h3 class="status-title">시스템 요구사항</h3>
+                    <ul class="feature-list">
+                        <li class="feature-item">Node.js 18.0.0 이상</li>
+                        <li class="feature-item">macOS (Xcode 프로젝트 지원)</li>
+                        <li class="feature-item">Cursor Editor (선택사항)</li>
+                        <li class="feature-item">AI 모델 API 키 (최소 1개)</li>
+                    </ul>
+                </div>
+
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="nextStep()">설치 시작</button>
+                </div>
+            </div>
+
+            <!-- 설치 경로 선택 -->
+            <div class="content-section" id="path-selection">
+                <h1 class="section-title">설치 경로 선택</h1>
+                <p class="section-description">
+                    MCP Cursor Server가 설치될 폴더를 선택해주세요.
+                </p>
+
+                <div class="form-group">
+                    <label class="form-label">설치 경로</label>
+                    <div style="display: flex; align-items: center;">
+                        <input type="text" class="path-input" id="install-path" placeholder="설치 경로를 선택하세요" readonly>
+                        <button class="path-button" onclick="selectPath()">폴더 선택</button>
+                    </div>
+                </div>
+
+                <div class="status-card">
+                    <h3 class="status-title">설치 정보</h3>
+                    <p class="status-description">
+                        선택한 경로에 <code>cursor-server</code> 폴더가 생성되고, 
+                        모든 필요한 파일들이 다운로드 및 설치됩니다.
+                    </p>
+                </div>
+
+                <div class="button-group">
+                    <button class="btn btn-secondary" onclick="prevStep()">이전</button>
+                    <button class="btn btn-primary" onclick="nextStep()" id="path-next-btn" disabled>다음</button>
+                </div>
+            </div>
+
+            <!-- 설치 진행 -->
+            <div class="content-section" id="installation">
+                <h1 class="section-title">설치 진행 중</h1>
+                <p class="section-description">
+                    MCP Cursor Server를 설치하고 있습니다. 잠시만 기다려주세요.
+                </p>
+
+                <div class="progress-container">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progress-fill"></div>
+                    </div>
+                    <div class="progress-text" id="progress-text">준비 중...</div>
+                </div>
+
+                <div class="log-container" id="log-container">
+                    <div class="log-entry info">
+                        <span class="log-timestamp">[시작]</span>
+                        <span class="log-message">설치를 시작합니다...</span>
+                    </div>
+                </div>
+
+                <div class="button-group">
+                    <button class="btn btn-secondary" onclick="prevStep()" id="install-prev-btn">이전</button>
+                    <button class="btn btn-primary" onclick="startInstallation()" id="install-start-btn">설치 시작</button>
+                </div>
+            </div>
+
+            <!-- 설치 완료 -->
+            <div class="content-section" id="completion">
+                <h1 class="section-title">설치 완료!</h1>
+                <p class="section-description">
+                    MCP Cursor Server가 성공적으로 설치되었습니다.
+                </p>
+
+                <div class="status-card">
+                    <h3 class="status-title">다음 단계</h3>
+                    <p class="status-description">
+                        1. <code>.env</code> 파일에 AI 모델 API 키를 설정하세요<br>
+                        2. Cursor Editor를 실행하고 API 서버를 활성화하세요<br>
+                        3. 서버를 시작하여 사용을 시작하세요
+                    </p>
+                </div>
+
+                <div class="button-group">
+                    <button class="btn btn-success" onclick="startServer()">서버 시작</button>
+                    <button class="btn btn-secondary" onclick="openFolder()">설치 폴더 열기</button>
+                    <button class="btn btn-primary" onclick="openDocs()">문서 보기</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
+

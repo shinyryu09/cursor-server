@@ -6,13 +6,14 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
   ListPromptsRequestSchema,
-  GetPromptRequestSchema
+  GetPromptRequestSchema,
+  InitializeRequestSchema,
+  PingRequestSchema
 } from '@modelcontextprotocol/sdk/types.js';
 import logger from '../utils/logger.js';
 import config from '../config/config.js';
 import { MCP_METHODS, MCP_ERROR_CODES, MCPError } from '../types/mcp.js';
 import ProjectDetector from '../services/projectDetector.js';
-import CursorService from '../services/cursorService.js';
 import AIService from '../services/aiService.js';
 
 /**
@@ -35,7 +36,6 @@ export class MCPServer {
     );
 
     this.projectDetector = new ProjectDetector();
-    this.cursorService = new CursorService();
     this.aiService = new AIService();
 
     this.setupHandlers();
@@ -45,7 +45,7 @@ export class MCPServer {
    * 서비스 초기화
    */
   async initialize() {
-    await this.cursorService.initialize();
+    await this.aiService.initialize();
     logger.info('MCP 서버 서비스 초기화 완료');
   }
 
@@ -54,50 +54,64 @@ export class MCPServer {
    */
   setupHandlers() {
     // 초기화 핸들러
-    this.server.setRequestHandler({
-      method: 'initialize',
-      handler: async (request) => {
-        logger.info('MCP 서버 초기화 요청');
-        
-        // 프로젝트 감지
-        const project = await this.projectDetector.detectProject();
-        
-        return {
-          protocolVersion: '2024-11-05',
-          capabilities: {
-            resources: {
-              subscribe: true,
-              listChanged: true
-            },
-            tools: {
-              listChanged: true
-            },
-            prompts: {
-              listChanged: true
-            }
+    this.server.setRequestHandler(InitializeRequestSchema, async (request) => {
+      logger.info('MCP 서버 초기화 요청');
+      
+      // 프로젝트 감지
+      const project = await this.projectDetector.detectProject();
+      
+      // 사용 가능한 AI 모델 정보 가져오기
+      const availableModels = this.aiService.getAvailableModels();
+      
+      return {
+        protocolVersion: '2024-11-05',
+        capabilities: {
+          resources: {
+            subscribe: true,
+            listChanged: true
           },
-          serverInfo: {
-            name: config.mcp.name,
-            version: config.mcp.version,
-            description: config.mcp.description
+          tools: {
+            listChanged: true
           },
-          project: project
-        };
-      }
+          prompts: {
+            listChanged: true
+          }
+        },
+        serverInfo: {
+          name: config.mcp.name,
+          version: config.mcp.version,
+          description: config.mcp.description
+        },
+        project: project,
+        models: availableModels.map(model => ({
+          id: model.id,
+          name: model.name,
+          type: model.type,
+          available: model.available,
+          description: `${model.type} 모델을 통한 코드 생성 및 분석`
+        }))
+      };
     });
 
     // 핑 핸들러
-    this.server.setRequestHandler({
-      method: 'ping',
-      handler: async () => {
-        return { pong: true };
-      }
+    this.server.setRequestHandler(PingRequestSchema, async () => {
+      return { pong: true };
     });
+
+    // 모델 목록은 MCP SDK에서 기본 제공되지 않으므로 제거
 
     // 리소스 핸들러
     this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
       const project = this.projectDetector.getCurrentProject();
       const resources = [];
+
+      // AI 모델 정보 리소스 추가
+      resources.push({
+        uri: 'ai://models',
+        name: 'AI Models',
+        description: '사용 가능한 AI 모델 목록',
+        mimeType: 'application/json'
+      });
 
       if (project) {
         resources.push({
@@ -132,6 +146,22 @@ export class MCPServer {
               uri,
               mimeType: 'application/json',
               text: JSON.stringify(project, null, 2)
+            }
+          ]
+        };
+      }
+
+      // AI 모델 정보 리소스 처리
+      if (uri === 'ai://models') {
+        const availableModels = this.aiService.getAvailableModels();
+        const modelsJson = JSON.stringify(availableModels, null, 2);
+        
+        return {
+          contents: [
+            {
+              uri,
+              mimeType: 'application/json',
+              text: modelsJson
             }
           ]
         };

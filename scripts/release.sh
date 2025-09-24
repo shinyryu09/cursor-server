@@ -264,3 +264,4 @@ echo "  1. Verify the release on GitHub"
 echo "  2. Update any dependent projects"
 echo "  3. Announce the release to users"
 echo ""
+

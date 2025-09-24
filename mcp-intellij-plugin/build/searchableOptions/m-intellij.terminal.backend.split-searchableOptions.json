@@ -1,0 +1,1 @@
+{"id":"preferences.keymap","name":"Keymap","entries":[{"hit":"Create new session in new tab","path":"ActionManager"},{"hit":"New Tab","path":"ActionManager"},{"hit":"Share Terminal","path":"ActionManager"},{"hit":"Stop Sharing","path":"ActionManager"}]}

@@ -7,7 +7,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
-import HttpMCPServer from './core/httpServer.js';
 import logger from './utils/logger.js';
 import config from './config/config.js';
 
@@ -41,9 +40,16 @@ class Application {
       .option('-p, --port <port>', 'Server port', config.server.port.toString())
       .option('-h, --host <host>', 'Server host', config.server.host)
       .option('--stdio', 'Use stdio transport (default for MCP)')
-      .option('--http', 'Use HTTP transport')
       .action(async (options) => {
         await this.startServer(options);
+      });
+
+    // MCP 모드 명령어 (stdio 전용)
+    this.program
+      .command('mcp')
+      .description('Start the MCP server in stdio mode for plugin integration')
+      .action(async () => {
+        await this.startMCPServer();
       });
 
     // 프로젝트 감지 명령어
@@ -106,6 +112,7 @@ class Application {
       .action(async (options) => {
         await this.handleChatHistory(options);
       });
+
   }
 
   /**
@@ -117,14 +124,26 @@ class Application {
       console.log(chalk.gray(`버전: ${config.mcp.version}`));
       console.log(chalk.gray(`환경: ${config.server.environment}`));
 
+      // 시스템 요구사항 확인
+      await this.checkSystemRequirements();
+
       // 로그 디렉토리 생성
       await this.ensureLogDirectory();
 
-      // HTTP MCP 서버 생성
-      this.mcpServer = new HttpMCPServer();
-
-      // 서버 시작
+      // MCP 서버 시작 (stdio 모드)
+      const { MCPServer } = await import('./core/mcpServer.js');
+      this.mcpServer = new MCPServer();
+      await this.mcpServer.initialize();
       await this.mcpServer.start();
+      
+      console.log(chalk.green('✅ MCP 서버가 stdio 모드로 시작되었습니다.'));
+      
+      // HTTP 서버 시작 (플러그인용)
+      const { HttpServer } = await import('./core/httpServer.js');
+      this.httpServer = new HttpServer();
+      await this.httpServer.start();
+      
+      console.log(chalk.green(`✅ HTTP 서버가 시작되었습니다: http://${config.server.host}:${config.server.port}`));
 
       console.log(chalk.green.bold('✅ MCP 서버가 성공적으로 시작되었습니다!'));
       console.log(chalk.gray('Ctrl+C를 눌러 서버를 중지할 수 있습니다.'));
@@ -145,6 +164,106 @@ class Application {
     } catch (error) {
       console.error(chalk.red.bold('❌ 서버 시작 실패:'), error.message);
       logger.error('서버 시작 실패:', error);
+      
+      // 구체적인 에러 메시지 제공
+      if (error.code === 'EADDRINUSE') {
+        console.error(chalk.yellow('💡 포트가 이미 사용 중입니다. 다른 포트를 사용하거나 기존 프로세스를 종료하세요.'));
+        console.error(chalk.gray(`  lsof -i :${config.server.port}`));
+      } else if (error.code === 'ENOENT') {
+        console.error(chalk.yellow('💡 필요한 파일이나 디렉토리를 찾을 수 없습니다.'));
+        console.error(chalk.gray('  npm run setup 명령어로 자동 설치를 시도해보세요.'));
+      } else if (error.message.includes('Cannot find module')) {
+        console.error(chalk.yellow('💡 의존성 모듈을 찾을 수 없습니다.'));
+        console.error(chalk.gray('  npm install 또는 npm run install:clean 명령어를 실행하세요.'));
+      }
+      
+      process.exit(1);
+    }
+  }
+
+  /**
+   * 시스템 요구사항 확인
+   */
+  async checkSystemRequirements() {
+    console.log(chalk.blue('🔍 시스템 요구사항 확인 중...'));
+    
+    // Node.js 버전 확인
+    const nodeVersion = process.version;
+    const requiredVersion = '18.0.0';
+    
+    if (this.compareVersions(nodeVersion.slice(1), requiredVersion) < 0) {
+      throw new Error(`Node.js 버전이 너무 낮습니다. 현재: ${nodeVersion}, 필요: v${requiredVersion} 이상`);
+    }
+    
+    console.log(chalk.gray(`  ✅ Node.js: ${nodeVersion}`));
+    
+    // 필수 디렉토리 확인
+    const requiredDirs = ['src', 'logs'];
+    for (const dir of requiredDirs) {
+      try {
+        await fs.access(dir);
+        console.log(chalk.gray(`  ✅ 디렉토리: ${dir}`));
+      } catch {
+        console.log(chalk.gray(`  ⚠️  디렉토리: ${dir} (자동 생성됨)`));
+        await fs.mkdir(dir, { recursive: true });
+      }
+    }
+    
+    // 환경 변수 확인
+    const requiredEnvVars = ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'GOOGLE_API_KEY', 'CURSOR_API_KEY'];
+    const hasApiKey = requiredEnvVars.some(key => process.env[key]);
+    
+    if (!hasApiKey) {
+      console.log(chalk.yellow('  ⚠️  AI 모델 API 키가 설정되지 않았습니다.'));
+      console.log(chalk.gray('    .env 파일에 최소 하나의 API 키를 설정하세요.'));
+    } else {
+      console.log(chalk.gray('  ✅ AI 모델 API 키 설정됨'));
+    }
+    
+    console.log(chalk.green('✅ 시스템 요구사항 확인 완료'));
+  }
+
+  /**
+   * 버전 비교 함수
+   */
+  compareVersions(version1, version2) {
+    const v1parts = version1.split('.').map(Number);
+    const v2parts = version2.split('.').map(Number);
+    
+    for (let i = 0; i < Math.max(v1parts.length, v2parts.length); i++) {
+      const v1part = v1parts[i] || 0;
+      const v2part = v2parts[i] || 0;
+      
+      if (v1part < v2part) return -1;
+      if (v1part > v2part) return 1;
+    }
+    
+    return 0;
+  }
+
+  /**
+   * MCP 서버 시작 (stdio 모드)
+   */
+  async startMCPServer() {
+    try {
+      console.log(chalk.blue('🚀 MCP Cursor Server 시작 중...'));
+      console.log(chalk.gray(`버전: ${config.mcp.version}`));
+      console.log(chalk.gray(`환경: ${config.mcp.environment}`));
+      
+      // 시스템 요구사항 확인
+      await this.checkSystemRequirements();
+      
+      // MCP 서버만 시작 (stdio 모드)
+      const { MCPServer } = await import('./core/mcpServer.js');
+      this.mcpServer = new MCPServer();
+      await this.mcpServer.initialize();
+      await this.mcpServer.start();
+      
+      logger.info('MCP 서버가 stdio 모드로 시작되었습니다');
+      
+    } catch (error) {
+      console.error(chalk.red('❌ MCP 서버 시작 실패:'), error.message);
+      logger.error('MCP 서버 시작 실패:', error);
       process.exit(1);
     }
   }
@@ -153,14 +272,17 @@ class Application {
    * 서버 중지
    */
   async stopServer() {
-    if (this.mcpServer) {
-      try {
-        await this.mcpServer.stop();
-        console.log(chalk.green('✅ 서버가 중지되었습니다.'));
-      } catch (error) {
-        console.error(chalk.red('❌ 서버 중지 실패:'), error.message);
-        logger.error('서버 중지 실패:', error);
+    try {
+      if (this.httpServer) {
+        await this.httpServer.stop();
       }
+      if (this.mcpServer) {
+        await this.mcpServer.stop();
+      }
+      console.log(chalk.green('✅ MCP 서버가 중지되었습니다.'));
+    } catch (error) {
+      console.error(chalk.red('❌ 서버 중지 실패:'), error.message);
+      logger.error('서버 중지 실패:', error);
     }
   }
 
@@ -230,18 +352,6 @@ class Application {
         }
       }
 
-      // Cursor Editor 서비스 상태
-      console.log(chalk.cyan('\nCursor Editor 서비스 상태:'));
-      const CursorEditorService = (await import('./services/cursorEditorService.js')).default;
-      const cursorEditorService = new CursorEditorService();
-      const cursorEditorStatus = cursorEditorService.getStatus();
-
-      const cursorIcon = cursorEditorStatus.available ? '✅' : '❌';
-      console.log(chalk.gray(`  ${cursorIcon} Cursor Editor: ${cursorEditorStatus.available ? '사용 가능' : '사용 불가'}`));
-      if (cursorEditorStatus.available) {
-        console.log(chalk.gray(`    Base URL: ${cursorEditorStatus.baseUrl}`));
-        console.log(chalk.gray(`    타임아웃: ${cursorEditorStatus.timeout}ms`));
-      }
 
       // 프로젝트 상태
       console.log(chalk.cyan('\n프로젝트 상태:'));
@@ -750,6 +860,7 @@ class Application {
       throw new Error(`히스토리 검색 실패: ${error.message}`);
     }
   }
+
 
   /**
    * 로그 디렉토리 생성

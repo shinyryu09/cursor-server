@@ -1,0 +1,91 @@
+<idea-plugin>
+  <version>1.0.8</version>
+  <idea-version since-build="233" until-build="252.*" />
+  <id>com.mcp.cursor.client</id>
+  <name>MCP Cursor Client</name>
+  <vendor email="support@example.com" url="https://example.com">MCP Cursor Team</vendor>
+  <description><![CDATA[<h2>MCP Cursor Client Plugin</h2>
+    <p>이 플러그인은 MCP (Model Context Protocol) Cursor Server와 연결하여 AI 기반 코드 생성 및 분석 기능을 제공합니다.</p>
+    
+    <h3>주요 기능:</h3>
+    <ul>
+        <li>🤖 AI 모델을 통한 코드 생성</li>
+        <li>📊 코드 분석 및 리뷰</li>
+        <li>🔍 프로젝트 컨텍스트 인식</li>
+        <li>💬 AI 채팅 기능</li>
+        <li>⚡ 실시간 코드 제안</li>
+    </ul>
+    
+    <h3>지원 모델:</h3>
+    <ul>
+        <li>OpenAI GPT-4, GPT-3.5-turbo</li>
+        <li>Anthropic Claude 3.5 Sonnet</li>
+        <li>Google Gemini Pro</li>
+        <li>Cursor AI</li>
+    </ul>]]></description>
+  <change-notes><![CDATA[<h3>Version 1.0.8</h3>
+    <ul>
+        <li>🆕 서버 상태 확인 기능 추가</li>
+        <li>🔄 서버 재시작 기능 추가</li>
+        <li>⚡ 빠른 설정 기능 추가</li>
+        <li>🔧 MCP 프로토콜 연결 개선</li>
+        <li>📊 더 자세한 로깅 및 디버깅</li>
+        <li>🐛 연결 문제 해결</li>
+    </ul>
+    
+    <h3>Version 1.0.7</h3>
+    <ul>
+        <li>MCP 프로토콜 지원</li>
+        <li>stdio 통신 구현</li>
+        <li>서버 경로 설정 추가</li>
+    </ul>
+    
+    <h3>Version 1.0.0</h3>
+    <ul>
+        <li>초기 릴리스</li>
+        <li>MCP Cursor Server 연결 지원</li>
+        <li>AI 코드 생성 및 분석 기능</li>
+        <li>프로젝트 컨텍스트 인식</li>
+    </ul>]]></change-notes>
+  <!-- please see https://plugins.jetbrains.com/docs/intellij/plugin-compatibility.html
+         on how to target different products -->
+  <depends>com.intellij.modules.platform</depends>
+  <depends>com.intellij.modules.java</depends>
+  <extensions defaultExtensionNs="com.intellij">
+    <!-- AI 코드 생성 액션 -->
+    <action id="MCPCursor.GenerateCode" class="com.mcp.cursor.client.actions.GenerateCodeAction" text="Generate Code with AI" description="AI를 사용하여 코드 생성">
+      <add-to-group group-id="CodeMenu" anchor="after" relative-to-action="Generate" />
+      <keyboard-shortcut keymap="$default" first-keystroke="ctrl shift G" />
+    </action>
+    <!-- AI 채팅 액션 -->
+    <action id="MCPCursor.OpenChat" class="com.mcp.cursor.client.actions.OpenChatAction" text="Open AI Chat" description="AI 채팅 창 열기">
+      <add-to-group group-id="ToolsMenu" anchor="after" relative-to-action="Terminal" />
+      <keyboard-shortcut keymap="$default" first-keystroke="ctrl shift C" />
+    </action>
+    <!-- 코드 분석 액션 -->
+    <action id="MCPCursor.AnalyzeCode" class="com.mcp.cursor.client.actions.AnalyzeCodeAction" text="Analyze Code with AI" description="AI를 사용하여 코드 분석">
+      <add-to-group group-id="CodeMenu" anchor="after" relative-to-action="MCPCursor.GenerateCode" />
+    </action>
+    <!-- 설정 액션 -->
+    <action id="MCPCursor.Settings" class="com.mcp.cursor.client.actions.SettingsAction" text="MCP Cursor Settings" description="MCP Cursor 설정">
+      <add-to-group group-id="ToolsMenu" anchor="after" relative-to-action="MCPCursor.OpenChat" />
+      <add-to-group group-id="MainMenu" anchor="after" relative-to-action="HelpMenu" />
+    </action>
+    <!-- 서버 상태 확인 액션 -->
+    <action id="MCPCursor.ServerStatus" class="com.mcp.cursor.client.actions.ServerStatusAction" text="서버 상태 확인" description="MCP 서버 상태 확인">
+      <add-to-group group-id="ToolsMenu" anchor="after" relative-to-action="MCPCursor.Settings" />
+    </action>
+    <!-- 서버 재시작 액션 -->
+    <action id="MCPCursor.RestartServer" class="com.mcp.cursor.client.actions.RestartServerAction" text="서버 재시작" description="MCP 서버 재시작">
+      <add-to-group group-id="ToolsMenu" anchor="after" relative-to-action="MCPCursor.ServerStatus" />
+    </action>
+    <!-- 빠른 설정 액션 -->
+    <action id="MCPCursor.QuickSetup" class="com.mcp.cursor.client.actions.QuickSetupAction" text="빠른 설정" description="MCP 서버 빠른 설정">
+      <add-to-group group-id="ToolsMenu" anchor="after" relative-to-action="MCPCursor.RestartServer" />
+    </action>
+    <!-- 툴 윈도우 등록 -->
+    <toolWindow id="MCP Cursor Chat" anchor="right" factoryClass="com.mcp.cursor.client.ui.ChatToolWindowFactory" />
+    <!-- 설정 페이지 등록 -->
+    <projectConfigurable parentId="tools" instance="com.mcp.cursor.client.settings.MCPSettingsConfigurable" id="com.mcp.cursor.client.settings" displayName="MCP Cursor" />
+  </extensions>
+</idea-plugin>

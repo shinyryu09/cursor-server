@@ -220,3 +220,4 @@ jobs:
         echo "  - mcp-cursor-server-v${{ steps.version.outputs.version }}.zip"
         echo "  - Checksums included"
         echo "🔗 Release URL: https://github.com/${{ github.repository }}/releases/tag/v${{ steps.version.outputs.version }}"
+

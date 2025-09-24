@@ -9,7 +9,7 @@ const __dirname = dirname(__filename);
 // .env 파일 로드
 dotenv.config({ path: join(__dirname, '../../.env') });
 
-export const config = {
+const config = {
   // 서버 설정
   server: {
     port: process.env.PORT || 3000,
@@ -39,11 +39,6 @@ export const config = {
       apiKey: process.env.GOOGLE_API_KEY,
       models: ['gemini-pro', 'gemini-pro-vision']
     },
-    cursor: {
-      apiKey: process.env.CURSOR_API_KEY,
-      baseURL: process.env.CURSOR_BASE_URL || 'https://api.cursor.com/v1',
-      models: ['cursor-small', 'gpt-4', 'claude-3-5-sonnet-20241022']
-    }
   },
 
   // 프로젝트 감지 설정

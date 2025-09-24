@@ -29,8 +29,13 @@ export class CacheService {
     this.maxMemorySize = config.cache?.maxMemorySize || 100; // 메모리 캐시 최대 항목 수
     this.defaultTTL = config.cache?.defaultTTL || 3600; // 기본 TTL (초)
     this.maxDiskSize = config.cache?.maxDiskSize || 1000; // 디스크 캐시 최대 항목 수
-    
-    this.initializeCache();
+  }
+
+  /**
+   * 서비스 초기화
+   */
+  async initialize() {
+    await this.initializeCache();
   }
 
   /**
