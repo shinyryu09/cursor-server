@@ -168,3 +168,5 @@ MIT License
 **MCP Cursor IntelliJ Plugin**으로 더욱 효율적인 개발을 경험해보세요! 🚀
 
 
+
+

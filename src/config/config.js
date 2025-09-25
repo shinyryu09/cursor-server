@@ -17,6 +17,10 @@ const config = {
     environment: process.env.NODE_ENV || 'development'
   },
 
+  // 전역 설정
+  version: '2.0.0',
+  environment: process.env.NODE_ENV || 'development',
+
   // MCP 설정
   mcp: {
     name: 'mcp-cursor-server',

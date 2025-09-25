@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "cursor-server": {
+      "command": "node",
+      "args": ["src/server.js", "start"],
+      "cwd": "/Users/kakaovx/Documents/cursor-server",
+      "env": {
+        "NODE_ENV": "development"
+      }
+    }
+  }
+}
+

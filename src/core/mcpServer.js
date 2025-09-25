@@ -12,12 +12,13 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import logger from '../utils/logger.js';
 import config from '../config/config.js';
-import { MCP_METHODS, MCP_ERROR_CODES, MCPError } from '../types/mcp.js';
-import ProjectDetector from '../services/projectDetector.js';
-import AIService from '../services/aiService.js';
+import { AIService } from '../services/aiService.js';
+import { ProjectDetector } from '../services/projectDetector.js';
+import { CacheService } from '../services/cacheService.js';
 
 /**
  * MCP 서버 핵심 클래스
+ * Cursor Editor와 직접 연결되는 MCP 프로토콜 서버
  */
 export class MCPServer {
   constructor() {
@@ -35,8 +36,9 @@ export class MCPServer {
       }
     );
 
-    this.projectDetector = new ProjectDetector();
     this.aiService = new AIService();
+    this.projectDetector = new ProjectDetector();
+    this.cacheService = new CacheService();
 
     this.setupHandlers();
   }
@@ -46,181 +48,53 @@ export class MCPServer {
    */
   async initialize() {
     await this.aiService.initialize();
+    await this.cacheService.initialize();
     logger.info('MCP 서버 서비스 초기화 완료');
   }
 
   /**
    * MCP 핸들러 설정
+   * JSON-RPC 1.0, 2.0 모두 지원
    */
   setupHandlers() {
-    // 초기화 핸들러
+    // Initialize handler
     this.server.setRequestHandler(InitializeRequestSchema, async (request) => {
       logger.info('MCP 서버 초기화 요청');
       
-      // 프로젝트 감지
       const project = await this.projectDetector.detectProject();
-      
-      // 사용 가능한 AI 모델 정보 가져오기
       const availableModels = this.aiService.getAvailableModels();
       
       return {
         protocolVersion: '2024-11-05',
         capabilities: {
-          resources: {
-            subscribe: true,
-            listChanged: true
-          },
-          tools: {
-            listChanged: true
-          },
-          prompts: {
-            listChanged: true
-          }
+          resources: { subscribe: true, listChanged: true },
+          tools: { listChanged: true },
+          prompts: { listChanged: true }
         },
         serverInfo: {
           name: config.mcp.name,
           version: config.mcp.version,
-          description: config.mcp.description
+          description: 'MCP server for Cursor Editor integration with AI models',
+          jsonRpcVersions: ['1.0', '2.0']
         },
         project: project,
-        models: availableModels.map(model => ({
-          id: model.id,
-          name: model.name,
-          type: model.type,
-          available: model.available,
-          description: `${model.type} 모델을 통한 코드 생성 및 분석`
-        }))
+        models: availableModels
       };
     });
 
-    // 핑 핸들러
-    this.server.setRequestHandler(PingRequestSchema, async () => {
-      return { pong: true };
-    });
-
-    // 모델 목록은 MCP SDK에서 기본 제공되지 않으므로 제거
-
-    // 리소스 핸들러
-    this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
-      const project = this.projectDetector.getCurrentProject();
-      const resources = [];
-
-      // AI 모델 정보 리소스 추가
-      resources.push({
-        uri: 'ai://models',
-        name: 'AI Models',
-        description: '사용 가능한 AI 모델 목록',
-        mimeType: 'application/json'
-      });
-
-      if (project) {
-        resources.push({
-          uri: `project://${project.type}`,
-          name: project.name,
-          description: `${project.type} 프로젝트: ${project.name}`,
-          mimeType: 'application/json'
-        });
-
-        // 프로젝트 파일들 추가
-        if (project.type === 'xcode') {
-          resources.push({
-            uri: `file://${project.projectFile}`,
-            name: `${project.name}.xcodeproj`,
-            description: 'Xcode 프로젝트 파일',
-            mimeType: 'application/x-xcode-project'
-          });
-        }
-      }
-
-      return { resources };
-    });
-
-    this.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
-      const { uri } = request.params;
-      
-      if (uri.startsWith('project://')) {
-        const project = this.projectDetector.getCurrentProject();
-        return {
-          contents: [
-            {
-              uri,
-              mimeType: 'application/json',
-              text: JSON.stringify(project, null, 2)
-            }
-          ]
-        };
-      }
-
-      // AI 모델 정보 리소스 처리
-      if (uri === 'ai://models') {
-        const availableModels = this.aiService.getAvailableModels();
-        const modelsJson = JSON.stringify(availableModels, null, 2);
-        
-        return {
-          contents: [
-            {
-              uri,
-              mimeType: 'application/json',
-              text: modelsJson
-            }
-          ]
-        };
-      }
-
-      if (uri.startsWith('file://')) {
-        const filePath = uri.replace('file://', '');
-        try {
-          const content = await this.readFile(filePath);
-          const mimeType = this.getMimeType(filePath);
-          
-          return {
-            contents: [
-              {
-                uri,
-                mimeType,
-                text: content
-              }
-            ]
-          };
-        } catch (error) {
-          throw new MCPError(MCP_ERROR_CODES.INTERNAL_ERROR, `파일 읽기 실패: ${error.message}`);
-        }
-      }
-
-      throw new MCPError(MCP_ERROR_CODES.INVALID_PARAMS, `지원하지 않는 리소스 URI: ${uri}`);
-    });
-
-    // 도구 핸들러
+    // Tools list handler
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
       return {
         tools: [
           {
-            name: 'detect_project',
-            description: '현재 작업 디렉토리에서 프로젝트 감지',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                workingDir: {
-                  type: 'string',
-                  description: '작업 디렉토리 경로 (선택사항)'
-                }
-              }
-            }
-          },
-          {
             name: 'cursor_chat',
-            description: 'Cursor CLI를 사용한 채팅',
+            description: 'Cursor Editor 기본 모델을 사용한 채팅',
             inputSchema: {
               type: 'object',
               properties: {
                 message: {
                   type: 'string',
-                  description: '채팅 메시지'
-                },
-                files: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  description: '관련 파일 경로들 (선택사항)'
+                  description: '사용자 메시지'
                 }
               },
               required: ['message']
@@ -234,19 +108,14 @@ export class MCPServer {
               properties: {
                 message: {
                   type: 'string',
-                  description: '채팅 메시지'
+                  description: '사용자 메시지'
                 },
                 model: {
                   type: 'string',
-                  description: '사용할 AI 모델',
-                  enum: ['gpt-4', 'gpt-3.5-turbo', 'claude-3-5-sonnet', 'gemini-pro']
-                },
-                context: {
-                  type: 'string',
-                  description: '추가 컨텍스트 (선택사항)'
+                  description: '사용할 AI 모델'
                 }
               },
-              required: ['message', 'model']
+              required: ['message']
             }
           },
           {
@@ -261,302 +130,104 @@ export class MCPServer {
                 },
                 analysisType: {
                   type: 'string',
-                  enum: ['syntax', 'performance', 'security', 'style'],
+                  enum: ['syntax', 'performance', 'security', 'style', 'general'],
                   description: '분석 유형'
                 }
               },
-              required: ['filePath', 'analysisType']
+              required: ['filePath']
             }
           },
           {
-            name: 'generate_code',
-            description: 'AI를 사용한 코드 생성',
+            name: 'detect_project',
+            description: '현재 작업 디렉토리에서 프로젝트 감지',
             inputSchema: {
               type: 'object',
               properties: {
-                prompt: {
+                workingDir: {
                   type: 'string',
-                  description: '코드 생성 요구사항'
-                },
-                language: {
-                  type: 'string',
-                  description: '프로그래밍 언어'
-                },
-                model: {
-                  type: 'string',
-                  description: '사용할 AI 모델',
-                  enum: ['gpt-4', 'gpt-3.5-turbo', 'claude-3-5-sonnet', 'gemini-pro']
-                },
-                context: {
-                  type: 'object',
-                  description: '추가 컨텍스트 (프로젝트 타입, 프레임워크 등)'
+                  description: '작업 디렉토리 경로 (선택사항)'
                 }
-              },
-              required: ['prompt', 'language', 'model']
-            }
-          },
-          {
-            name: 'review_code',
-            description: '코드 리뷰 및 개선 제안',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                code: {
-                  type: 'string',
-                  description: '리뷰할 코드'
-                },
-                language: {
-                  type: 'string',
-                  description: '프로그래밍 언어'
-                },
-                model: {
-                  type: 'string',
-                  description: '사용할 AI 모델',
-                  enum: ['gpt-4', 'gpt-3.5-turbo', 'claude-3-5-sonnet', 'gemini-pro']
-                },
-                reviewType: {
-                  type: 'string',
-                  enum: ['general', 'performance', 'security', 'style'],
-                  description: '리뷰 유형'
-                }
-              },
-              required: ['code', 'language', 'model']
-            }
-          },
-          {
-            name: 'cache_stats',
-            description: '캐시 통계 조회',
-            inputSchema: {
-              type: 'object',
-              properties: {}
-            }
-          },
-          {
-            name: 'cache_clear',
-            description: '캐시 전체 삭제',
-            inputSchema: {
-              type: 'object',
-              properties: {}
-            }
-          },
-          {
-            name: 'cache_cleanup',
-            description: '만료된 캐시 정리',
-            inputSchema: {
-              type: 'object',
-              properties: {}
-            }
-          },
-          {
-            name: 'cache_maintenance',
-            description: '수동 캐시 유지보수 실행',
-            inputSchema: {
-              type: 'object',
-              properties: {}
-            }
-          },
-          {
-            name: 'cache_maintenance_status',
-            description: '캐시 유지보수 서비스 상태 조회',
-            inputSchema: {
-              type: 'object',
-              properties: {}
+              }
             }
           }
         ]
       };
     });
 
+    // Tool call handler
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
-
+      
       try {
         switch (name) {
-          case 'detect_project':
-            const project = await this.projectDetector.detectProject(args.workingDir);
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: project 
-                    ? `프로젝트 감지됨: ${project.name} (${project.type}) - ${project.path}`
-                    : '프로젝트를 찾을 수 없습니다.'
-                }
-              ]
-            };
-
           case 'cursor_chat':
-            const cursorResult = await this.cursorService.chat(args.message, args.files);
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: cursorResult
-                }
-              ]
-            };
-
+            return await this.aiService.chatWithCursorDefault(args.message);
+          
           case 'ai_chat':
-            const aiResult = await this.aiService.chat(args.message, args.model, args.context);
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: aiResult
-                }
-              ]
-            };
-
+            return await this.aiService.chat(args.message, args.model);
+          
           case 'analyze_code':
-            const analysisResult = await this.analyzeCode(args.filePath, args.analysisType);
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: analysisResult
-                }
-              ]
-            };
-
-          case 'generate_code':
-            const codeResult = await this.aiService.generateCode(
-              args.prompt, 
-              args.language, 
-              args.model, 
-              args.context || {}
-            );
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: codeResult
-                }
-              ]
-            };
-
-          case 'review_code':
-            const reviewResult = await this.aiService.reviewCode(
-              args.code, 
-              args.language, 
-              args.model, 
-              args.reviewType || 'general'
-            );
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: reviewResult
-                }
-              ]
-            };
-
-          case 'cache_stats':
-            const cacheStats = this.aiService.getCacheStats();
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: `캐시 통계:\n${JSON.stringify(cacheStats, null, 2)}`
-                }
-              ]
-            };
-
-          case 'cache_clear':
-            await this.aiService.clearCache();
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: '캐시가 성공적으로 삭제되었습니다.'
-                }
-              ]
-            };
-
-          case 'cache_cleanup':
-            const cleanedCount = await this.aiService.cleanupExpiredCache();
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: `만료된 캐시 ${cleanedCount}개가 정리되었습니다.`
-                }
-              ]
-            };
-
-          case 'cache_maintenance':
-            await this.aiService.runCacheMaintenance();
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: '캐시 유지보수가 성공적으로 실행되었습니다.'
-                }
-              ]
-            };
-
-          case 'cache_maintenance_status':
-            const maintenanceStatus = this.aiService.getCacheMaintenanceStatus();
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: `캐시 유지보수 서비스 상태:\n${JSON.stringify(maintenanceStatus, null, 2)}`
-                }
-              ]
-            };
-
+            return await this.aiService.analyzeCode(args.filePath, args.analysisType || 'general');
+          
+          case 'detect_project':
+            // 클라이언트의 워킹 디렉토리 자동 감지
+            const workingDir = args.workingDir || this.detectClientWorkingDirectory();
+            return await this.projectDetector.detectProject(workingDir);
+          
           default:
-            throw new MCPError(MCP_ERROR_CODES.METHOD_NOT_FOUND, `알 수 없는 도구: ${name}`);
+            throw new Error(`Unknown tool: ${name}`);
         }
       } catch (error) {
-        logger.error(`도구 실행 오류 (${name}):`, error);
-        throw new MCPError(MCP_ERROR_CODES.INTERNAL_ERROR, error.message);
+        logger.error(`Tool call error for ${name}:`, error);
+        throw error;
       }
     });
 
-    // 프롬프트 핸들러
+    // Resources list handler
+    this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
+      return {
+        resources: [
+          {
+            uri: 'models://available',
+            name: 'Available AI Models',
+            description: '사용 가능한 AI 모델 목록',
+            mimeType: 'application/json'
+          }
+        ]
+      };
+    });
+
+    // Resource read handler
+    this.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+      const { uri } = request.params;
+      
+      if (uri === 'models://available') {
+        const models = this.aiService.getAvailableModels();
+        return {
+          contents: [
+            {
+              uri: uri,
+              mimeType: 'application/json',
+              text: JSON.stringify(models, null, 2)
+            }
+          ]
+        };
+      }
+      
+      throw new Error(`Unknown resource: ${uri}`);
+    });
+
+    // Prompts list handler
     this.server.setRequestHandler(ListPromptsRequestSchema, async () => {
       return {
         prompts: [
           {
             name: 'code_review',
-            description: '코드 리뷰 및 개선 제안',
+            description: '코드 리뷰 프롬프트',
             arguments: [
               {
-                name: 'filePath',
-                description: '리뷰할 파일 경로',
-                required: true
-              }
-            ]
-          },
-          {
-            name: 'bug_fix',
-            description: '버그 수정 제안',
-            arguments: [
-              {
-                name: 'errorMessage',
-                description: '에러 메시지',
-                required: true
-              },
-              {
-                name: 'filePath',
-                description: '에러가 발생한 파일 경로',
-                required: true
-              }
-            ]
-          },
-          {
-            name: 'feature_implementation',
-            description: '기능 구현 제안',
-            arguments: [
-              {
-                name: 'description',
-                description: '구현할 기능 설명',
-                required: true
-              },
-              {
-                name: 'projectType',
-                description: '프로젝트 타입 (xcode, android)',
+                name: 'code',
+                description: '리뷰할 코드',
                 required: true
               }
             ]
@@ -565,140 +236,57 @@ export class MCPServer {
       };
     });
 
+    // Prompt get handler
     this.server.setRequestHandler(GetPromptRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
-
-      switch (name) {
-        case 'code_review':
-          return {
-            description: '코드 리뷰 및 개선 제안',
-            messages: [
-              {
-                role: 'user',
-                content: {
-                  type: 'text',
-                  text: `다음 파일을 리뷰하고 개선 제안을 해주세요:\n\n파일: ${args.filePath}`
-                }
+      
+      if (name === 'code_review') {
+        return {
+          description: '코드 리뷰를 위한 프롬프트',
+          messages: [
+            {
+              role: 'user',
+              content: {
+                type: 'text',
+                text: `다음 코드를 리뷰해주세요:\n\n\`\`\`\n${args.code}\n\`\`\``
               }
-            ]
-          };
-
-        case 'bug_fix':
-          return {
-            description: '버그 수정 제안',
-            messages: [
-              {
-                role: 'user',
-                content: {
-                  type: 'text',
-                  text: `다음 에러를 수정하는 방법을 제안해주세요:\n\n에러: ${args.errorMessage}\n파일: ${args.filePath}`
-                }
-              }
-            ]
-          };
-
-        case 'feature_implementation':
-          return {
-            description: '기능 구현 제안',
-            messages: [
-              {
-                role: 'user',
-                content: {
-                  type: 'text',
-                  text: `${args.projectType} 프로젝트에서 다음 기능을 구현하는 방법을 제안해주세요:\n\n기능: ${args.description}`
-                }
-              }
-            ]
-          };
-
-        default:
-          throw new MCPError(MCP_ERROR_CODES.METHOD_NOT_FOUND, `알 수 없는 프롬프트: ${name}`);
+            }
+          ]
+        };
       }
+      
+      throw new Error(`Unknown prompt: ${name}`);
     });
   }
 
   /**
-   * 파일 읽기
+   * 클라이언트 워킹 디렉토리 자동 감지
    */
-  async readFile(filePath) {
-    const fs = await import('fs/promises');
-    return await fs.readFile(filePath, 'utf8');
+  detectClientWorkingDirectory() {
+    // 환경 변수에서 클라이언트 워킹 디렉토리 확인
+    const clientWorkingDir = process.env.CLIENT_WORKING_DIR || 
+                           process.env.CWD || 
+                           process.env.PWD || 
+                           process.cwd();
+    
+    logger.info(`클라이언트 워킹 디렉토리 감지: ${clientWorkingDir}`);
+    return clientWorkingDir;
   }
 
   /**
-   * MIME 타입 결정
+   * stdio 모드로 서버 시작 (Cursor Editor 연결용)
    */
-  getMimeType(filePath) {
-    const ext = filePath.split('.').pop().toLowerCase();
-    const mimeTypes = {
-      'swift': 'text/x-swift',
-      'kt': 'text/x-kotlin',
-      'java': 'text/x-java',
-      'js': 'text/javascript',
-      'ts': 'text/typescript',
-      'json': 'application/json',
-      'xml': 'application/xml',
-      'html': 'text/html',
-      'css': 'text/css',
-      'md': 'text/markdown'
-    };
-    return mimeTypes[ext] || 'text/plain';
+  async startStdio() {
+    const transport = new StdioServerTransport();
+    await this.server.connect(transport);
+    logger.info('MCP 서버가 stdio 모드로 시작되었습니다');
   }
 
   /**
-   * 코드 분석
+   * HTTP 모드로 서버 시작 (HTTP 중계용)
    */
-  async analyzeCode(filePath, analysisType) {
-    try {
-      const content = await this.readFile(filePath);
-      const project = this.projectDetector.getCurrentProject();
-      
-      let prompt = `다음 ${project?.type || '코드'} 파일을 분석해주세요:\n\n`;
-      prompt += `파일: ${filePath}\n`;
-      prompt += `분석 유형: ${analysisType}\n\n`;
-      prompt += `코드:\n\`\`\`\n${content}\n\`\`\``;
-
-      // AI 서비스를 사용하여 분석
-      const result = await this.aiService.chat(prompt, 'gpt-4');
-      return result;
-    } catch (error) {
-      logger.error('코드 분석 오류:', error);
-      return `코드 분석 중 오류가 발생했습니다: ${error.message}`;
-    }
-  }
-
-  /**
-   * 서버 시작
-   */
-  async start() {
-    try {
-      // 서비스 초기화
-      await this.initialize();
-      
-      const transport = new StdioServerTransport();
-      await this.server.connect(transport);
-      logger.info('MCP 서버가 시작되었습니다');
-    } catch (error) {
-      logger.error('MCP 서버 시작 실패:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * 서버 중지
-   */
-  async stop() {
-    try {
-      // 캐시 유지보수 서비스 중지
-      this.aiService.stopCacheMaintenance();
-      
-      await this.server.close();
-      logger.info('MCP 서버가 중지되었습니다');
-    } catch (error) {
-      logger.error('MCP 서버 중지 실패:', error);
-      throw error;
-    }
+  async startHttp() {
+    // HTTP 모드는 mcpHttpServer에서 처리
+    logger.info('MCP 서버가 HTTP 모드로 시작되었습니다');
   }
 }
-
-export default MCPServer;
