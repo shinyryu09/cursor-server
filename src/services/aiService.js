@@ -566,10 +566,22 @@ export class AIService {
   async chatWithCursorDefault(message, context) {
     logger.info('Cursor Editor 기본 모델 사용');
     
+    // 메시지 유효성 검사
+    if (!message || typeof message !== 'string') {
+      logger.error('Invalid message type:', typeof message, message);
+      return '❌ **오류:** 유효하지 않은 메시지입니다.';
+    }
+    
+    // 메시지 정리
+    const cleanMessage = message.trim();
+    if (cleanMessage.length === 0) {
+      return '❌ **오류:** 빈 메시지입니다.';
+    }
+    
     // 간단한 패턴 매칭을 통한 기본 응답 생성
     let response = '';
     
-    const lowerMessage = message.toLowerCase();
+    const lowerMessage = cleanMessage.toLowerCase();
     
     // 인사말 처리
     if (lowerMessage.includes('안녕') || lowerMessage.includes('hello') || lowerMessage.includes('hi')) {
@@ -591,13 +603,13 @@ export class AIService {
 무엇을 도와드릴까요?`;
     }
     // 수학 계산 처리
-    else if (/^[\d\s\+\-\*\/\(\)\.]+$/.test(message.trim()) && /[\+\-\*\/]/.test(message.trim())) {
+    else if (/^[\d\s\+\-\*\/\(\)\.]+$/.test(cleanMessage) && /[\+\-\*\/]/.test(cleanMessage)) {
       try {
         // 안전한 수학 계산을 위해 eval 대신 간단한 파싱 사용
-        const result = this.safeMathEval(message.trim());
+        const result = this.safeMathEval(cleanMessage);
         response = `🧮 **수학 계산 결과:**
 
-**계산식:** ${message.trim()}
+**계산식:** ${cleanMessage}
 **결과:** ${result}
 
 💡 **추가 정보:**
@@ -608,7 +620,7 @@ export class AIService {
       } catch (error) {
         response = `❌ **계산 오류:**
 
-계산식 "${message.trim()}"을 처리할 수 없습니다.
+계산식 "${cleanMessage}"을 처리할 수 없습니다.
 
 💡 **지원하는 연산:**
 - 기본 사칙연산: +, -, *, /
@@ -620,8 +632,8 @@ export class AIService {
       }
     }
     // 숫자 관련 질문
-    else if (/^\d+$/.test(message.trim())) {
-      const num = parseInt(message.trim());
+    else if (/^\d+$/.test(cleanMessage)) {
+      const num = parseInt(cleanMessage);
       response = `입력하신 숫자 "${num}"에 대한 정보입니다:
 
 🔢 **숫자 분석:**
