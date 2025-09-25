@@ -14,6 +14,9 @@
         <li>🔍 프로젝트 컨텍스트 인식</li>
         <li>💬 AI 채팅 기능</li>
         <li>⚡ 실시간 코드 제안</li>
+        <li>🔧 서버 상태 모니터링</li>
+        <li>🔄 서버 재시작 기능</li>
+        <li>⚡ 빠른 설정 및 자동 감지</li>
     </ul>
     
     <h3>지원 모델:</h3>
@@ -21,11 +24,32 @@
         <li>OpenAI GPT-4, GPT-3.5-turbo</li>
         <li>Anthropic Claude 3.5 Sonnet</li>
         <li>Google Gemini Pro</li>
-        <li>Cursor AI</li>
+        <li>Cursor AI (기본 모델)</li>
+    </ul>
+    
+    <h3>새로운 기능:</h3>
+    <ul>
+        <li>📊 서버 상태 실시간 확인</li>
+        <li>🔄 원클릭 서버 재시작</li>
+        <li>⚡ 자동 서버 경로 감지</li>
+        <li>🔧 향상된 MCP 프로토콜 연결</li>
+        <li>📝 상세한 로깅 및 디버깅</li>
     </ul>
     ]]></description>
 
     <change-notes><![CDATA[
+    <h3>Version 1.0.9</h3>
+    <ul>
+        <li>🔧 MCP 연결 안정성 대폭 향상</li>
+        <li>📊 프로세스 시작 시 더 자세한 로깅</li>
+        <li>⏱️ 서버 초기화 완료 감지 로직 개선</li>
+        <li>🔄 15초 타임아웃으로 안정성 향상</li>
+        <li>🎯 응답 ID 매칭으로 정확한 통신</li>
+        <li>🛠️ JSON 파싱 오류 처리 개선</li>
+        <li>📝 플러그인 설명 및 기능 업데이트</li>
+        <li>🐛 런타임 연결 문제 해결</li>
+    </ul>
+    
     <h3>Version 1.0.8</h3>
     <ul>
         <li>🆕 서버 상태 확인 기능 추가</li>
