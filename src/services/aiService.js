@@ -684,6 +684,48 @@ export class AIService {
 
 이 숫자와 관련해서 특별히 알고 싶은 것이 있으신가요?`;
     }
+    // 프로젝트 관련 질문 (우선순위 높음)
+    else if (lowerMessage.includes('프로젝트') || lowerMessage.includes('project') ||
+             lowerMessage.includes('분석') || lowerMessage.includes('analyze')) {
+      response = `📋 **MCP Cursor Server 프로젝트 분석**
+
+현재 프로젝트에 대한 상세 정보입니다:
+
+🏷️ **프로젝트 정보:**
+- 이름: MCP Cursor Server
+- 버전: 2.0.0
+- 설명: Model Context Protocol을 사용한 AI 코드 생성 및 분석 서버
+- 환경: development
+
+🔧 **주요 기능:**
+- AI 모델 통합 (OpenAI, Anthropic, Google, Cursor)
+- MCP 프로토콜 지원
+- HTTP API 서버
+- IntelliJ/Android Studio 플러그인 지원
+- 캐시 시스템
+- 프로젝트 감지 및 컨텍스트 제공
+
+📁 **프로젝트 구조:**
+- \`src/\`: 소스 코드
+  - \`core/\`: MCP 서버 및 HTTP 서버
+  - \`services/\`: AI 서비스, 캐시, 채팅 히스토리
+  - \`utils/\`: 유틸리티 함수
+- \`mcp-intellij-plugin/\`: IntelliJ 플러그인
+- \`logs/\`: 로그 파일
+- \`data/\`: 데이터 저장소
+
+🌐 **서버 상태:**
+- HTTP 서버: http://localhost:3000
+- MCP 서버: stdio 모드
+- 지원 모델: cursor-default (기본), OpenAI, Anthropic, Google
+
+💡 **사용 가능한 명령어:**
+- \`node src/server.js start\`: 서버 시작
+- \`node src/server.js mcp\`: MCP 모드만 시작
+- \`node src/server.js status\`: 상태 확인
+
+더 자세한 정보가 필요하시면 구체적으로 질문해주세요!`;
+    }
     // 시스템/개발 도구 관련 질문
     else if (lowerMessage.includes('디렉토리') || lowerMessage.includes('directory') ||
              lowerMessage.includes('현재') || lowerMessage.includes('current') ||
