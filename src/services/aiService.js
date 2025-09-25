@@ -148,6 +148,26 @@ export class AIService {
 
     } catch (error) {
       logger.error('AI 채팅 오류:', error);
+      
+      // API 키 오류인 경우 cursor-default 모델로 fallback
+      if (error.message.includes('401') || 
+          error.message.includes('authentication_error') || 
+          error.message.includes('invalid') ||
+          error.message.includes('unauthorized')) {
+        
+        logger.info(`API 키 오류로 인해 cursor-default 모델로 fallback: ${model}`);
+        
+        try {
+          // fallback 시에는 원본 message 사용 (이미 유효성 검사 완료됨)
+          const fallbackResponse = await this.chatWithCursorDefault(message, context);
+          logger.info('cursor-default 모델로 fallback 성공');
+          return fallbackResponse;
+        } catch (fallbackError) {
+          logger.error('cursor-default 모델 fallback 실패:', fallbackError);
+          throw new Error(`AI 채팅 실패: ${error.message} (fallback도 실패)`);
+        }
+      }
+      
       throw new Error(`AI 채팅 실패: ${error.message}`);
     }
   }
