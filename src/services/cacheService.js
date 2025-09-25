@@ -61,12 +61,16 @@ export class CacheService {
   generateCacheKey(request) {
     const { message, model, context, type = 'chat' } = request;
     
+    // 메시지 유효성 검사
+    const safeMessage = (message && typeof message === 'string') ? message.trim() : '';
+    const safeContext = (context && typeof context === 'string') ? context.trim() : '';
+    
     // 요청 내용을 정규화하여 일관된 키 생성
     const normalizedRequest = {
       type,
       model,
-      message: message.trim(),
-      context: context ? context.trim() : ''
+      message: safeMessage,
+      context: safeContext
     };
     
     const keyString = JSON.stringify(normalizedRequest);

@@ -68,10 +68,21 @@ export class AIService {
    */
   async chat(message, model, context = '') {
     try {
+      // 메시지 유효성 검사
+      if (!message || typeof message !== 'string') {
+        logger.error('Invalid message type in chat method:', typeof message, message);
+        throw new Error('유효하지 않은 메시지입니다.');
+      }
+      
+      const cleanMessage = message.trim();
+      if (cleanMessage.length === 0) {
+        throw new Error('빈 메시지입니다.');
+      }
+      
       // 캐시가 활성화된 경우 캐시에서 먼저 조회
       if (config.cache?.enabled && config.cache?.strategy?.aiResponse?.enabled) {
         const cacheKey = this.cacheService.generateCacheKey({
-          message,
+          message: cleanMessage,
           model,
           context,
           type: 'chat'
@@ -87,7 +98,7 @@ export class AIService {
       // Cursor Editor 기본 모델 처리
       if (model === 'cursor-default') {
         logger.info(`Cursor Editor 기본 모델 사용: ${model}`);
-        return await this.chatWithCursorDefault(message, context);
+        return await this.chatWithCursorDefault(cleanMessage, context);
       }
 
       const modelType = this.getModelType(model);
@@ -101,16 +112,16 @@ export class AIService {
       let response;
       switch (modelType) {
         case AI_MODEL_TYPES.OPENAI:
-          response = await this.chatWithOpenAI(message, model, context);
+          response = await this.chatWithOpenAI(cleanMessage, model, context);
           break;
         case AI_MODEL_TYPES.ANTHROPIC:
-          response = await this.chatWithAnthropic(message, model, context);
+          response = await this.chatWithAnthropic(cleanMessage, model, context);
           break;
         case AI_MODEL_TYPES.GOOGLE:
-          response = await this.chatWithGoogle(message, model, context);
+          response = await this.chatWithGoogle(cleanMessage, model, context);
           break;
         case AI_MODEL_TYPES.CURSOR:
-          response = await this.chatWithCursor(message, model, context);
+          response = await this.chatWithCursor(cleanMessage, model, context);
           break;
         default:
           throw new Error(`지원하지 않는 모델 타입: ${modelType}`);
@@ -119,7 +130,7 @@ export class AIService {
       // 캐시에 응답 저장
       if (config.cache?.enabled && config.cache?.strategy?.aiResponse?.enabled) {
         const cacheKey = this.cacheService.generateCacheKey({
-          message,
+          message: cleanMessage,
           model,
           context,
           type: 'chat'
