@@ -603,10 +603,18 @@ export class AIService {
       return '❌ **오류:** 유효하지 않은 메시지입니다.';
     }
     
-    // 메시지 정리
-    const cleanMessage = message.trim();
+    // 메시지 정리 및 실제 질문 추출
+    let cleanMessage = message.trim();
     if (cleanMessage.length === 0) {
       return '❌ **오류:** 빈 메시지입니다.';
+    }
+    
+    // Xcode 스타일 메시지에서 실제 질문 추출
+    const xcodePattern = /The user has asked:\s*\n\s*(.+?)(?:\n|$)/i;
+    const xcodeMatch = cleanMessage.match(xcodePattern);
+    if (xcodeMatch) {
+      cleanMessage = xcodeMatch[1].trim();
+      logger.info(`Xcode 메시지에서 질문 추출: "${cleanMessage}"`);
     }
     
     // 간단한 패턴 매칭을 통한 기본 응답 생성
