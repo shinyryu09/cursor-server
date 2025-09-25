@@ -27,28 +27,42 @@
         <li>Cursor AI (기본 모델)</li>
     </ul>
     
-    <h3>새로운 기능:</h3>
-    <ul>
-        <li>📊 서버 상태 실시간 확인</li>
-        <li>🔄 원클릭 서버 재시작</li>
-        <li>⚡ 자동 서버 경로 감지</li>
-        <li>🔧 향상된 MCP 프로토콜 연결</li>
-        <li>📝 상세한 로깅 및 디버깅</li>
-    </ul>
+             <h3>새로운 기능:</h3>
+             <ul>
+                 <li>🆕 전용 서버 설정 패널</li>
+                 <li>⚙️ 실시간 연결 테스트</li>
+                 <li>📊 서버 상태 실시간 확인</li>
+                 <li>🔄 원클릭 서버 재시작</li>
+                 <li>⚡ 자동 서버 경로 감지</li>
+                 <li>🔧 향상된 MCP 프로토콜 연결</li>
+                 <li>📝 상세한 로깅 및 디버깅</li>
+             </ul>
     ]]></description>
 
-    <change-notes><![CDATA[
-    <h3>Version 1.0.9</h3>
-    <ul>
-        <li>🔧 MCP 연결 안정성 대폭 향상</li>
-        <li>📊 프로세스 시작 시 더 자세한 로깅</li>
-        <li>⏱️ 서버 초기화 완료 감지 로직 개선</li>
-        <li>🔄 15초 타임아웃으로 안정성 향상</li>
-        <li>🎯 응답 ID 매칭으로 정확한 통신</li>
-        <li>🛠️ JSON 파싱 오류 처리 개선</li>
-        <li>📝 플러그인 설명 및 기능 업데이트</li>
-        <li>🐛 런타임 연결 문제 해결</li>
-    </ul>
+             <change-notes><![CDATA[
+             <h3>Version 1.1.0</h3>
+             <ul>
+                 <li>🆕 새로운 서버 설정 패널 추가</li>
+                 <li>⚙️ 전용 설정 툴 윈도우 제공</li>
+                 <li>🔧 실시간 연결 테스트 기능</li>
+                 <li>⚡ 빠른 설정 버튼 통합</li>
+                 <li>📊 설정 상태 실시간 표시</li>
+                 <li>🎯 입력 검증 및 오류 처리 개선</li>
+                 <li>🔄 설정 초기화 기능 추가</li>
+                 <li>📱 더 직관적인 UI/UX</li>
+             </ul>
+             
+             <h3>Version 1.0.9</h3>
+             <ul>
+                 <li>🔧 MCP 연결 안정성 대폭 향상</li>
+                 <li>📊 프로세스 시작 시 더 자세한 로깅</li>
+                 <li>⏱️ 서버 초기화 완료 감지 로직 개선</li>
+                 <li>🔄 15초 타임아웃으로 안정성 향상</li>
+                 <li>🎯 응답 ID 매칭으로 정확한 통신</li>
+                 <li>🛠️ JSON 파싱 오류 처리 개선</li>
+                 <li>📝 플러그인 설명 및 기능 업데이트</li>
+                 <li>🐛 런타임 연결 문제 해결</li>
+             </ul>
     
     <h3>Version 1.0.8</h3>
     <ul>
@@ -133,18 +147,30 @@
             <add-to-group group-id="ToolsMenu" anchor="after" relative-to-action="MCPCursor.ServerStatus"/>
         </action>
         
+        <!-- 설정 패널 열기 액션 -->
+        <action id="MCPCursor.OpenSettings" 
+                class="com.mcp.cursor.client.actions.OpenSettingsAction" 
+                text="서버 설정 패널" 
+                description="MCP 서버 설정 패널 열기">
+            <add-to-group group-id="ToolsMenu" anchor="after" relative-to-action="MCPCursor.RestartServer"/>
+        </action>
+        
         <!-- 빠른 설정 액션 -->
         <action id="MCPCursor.QuickSetup" 
                 class="com.mcp.cursor.client.actions.QuickSetupAction" 
                 text="빠른 설정" 
                 description="MCP 서버 빠른 설정">
-            <add-to-group group-id="ToolsMenu" anchor="after" relative-to-action="MCPCursor.RestartServer"/>
+            <add-to-group group-id="ToolsMenu" anchor="after" relative-to-action="MCPCursor.OpenSettings"/>
         </action>
         
         <!-- 툴 윈도우 등록 -->
         <toolWindow id="MCP Cursor Chat" 
                    anchor="right" 
                    factoryClass="com.mcp.cursor.client.ui.ChatToolWindowFactory"/>
+        
+        <toolWindow id="MCP Cursor Settings" 
+                   anchor="right" 
+                   factoryClass="com.mcp.cursor.client.ui.MCPSettingToolWindowFactory"/>
         
         <!-- 설정 페이지 등록 -->
         <projectConfigurable parentId="tools" 
