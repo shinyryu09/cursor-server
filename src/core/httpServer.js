@@ -119,7 +119,22 @@ export class HttpServer {
 
         // 마지막 사용자 메시지 추출
         const lastMessage = messages[messages.length - 1];
-        const userMessage = lastMessage.content;
+        let userMessage = lastMessage.content;
+        
+        // content가 배열인 경우 첫 번째 요소의 text 추출
+        if (Array.isArray(userMessage)) {
+          userMessage = userMessage.find(item => item.type === 'text')?.text || '';
+        }
+        
+        // content가 객체인 경우 text 속성 추출
+        if (typeof userMessage === 'object' && userMessage !== null) {
+          userMessage = userMessage.text || '';
+        }
+        
+        // 문자열이 아닌 경우 빈 문자열로 설정
+        if (typeof userMessage !== 'string') {
+          userMessage = '';
+        }
 
         if (stream) {
           // 스트리밍 응답
